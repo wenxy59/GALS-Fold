@@ -1,0 +1,137 @@
+# Default training configuration
+
+checkpoint_prefix:
+  value: 'GALS_KFOLD1'
+  desc: Prefix for checkpoint filenames (e.g., 'kfold_1' -> 'kfold_1_best_checkpoint.h5')
+save_dir:
+  value: './trainedmodels'
+  desc: Directory to save model checkpoints
+device:
+  value: 'gpu'
+  desc: Device (cpu/cuda/xpu)
+gpu:
+  value: 3
+  desc: GPU ID
+seed:
+  value: 42
+  desc: Random seed
+save:
+  value: True
+  desc: Save model checkpoints
+
+# Data
+data_path:
+  value: "./data/"
+  desc: Data directory
+radius:
+  value: 4.5
+  desc: Local neighborhood radius (Angstrom)
+top_k:
+  value: 32
+  desc: Number of k-nearest neighbors
+num_rbf:
+  value: 32
+  desc: Number of radial basis functions
+num_posenc:
+  value: 32
+  desc: Number of positional encodings
+max_num_conformers:
+  value: 1
+  desc: Max conformations per sequence
+noise_scale:
+  value: 0.1
+  desc: Coordinate noise std during training
+max_nodes_batch:
+  value: 3000
+  desc: Max nodes per batch
+max_nodes_sample:
+  value: 5000
+  desc: Max nodes for single sample (max RNA length)
+
+# Data split
+split:
+  value: 'kfold_1'
+  desc: Data split type(kfold_1, kfold_2, kfold_3, kfold_4, kfold_5)
+
+# Model architecture
+model:
+  value: 'GALS'
+  desc: Model type (GALS/GVPAtten)
+node_in_dim:
+  value: [15, 4]
+  desc: Input node dimensions (scalar, vector)
+node_h_dim:
+  value: [128, 16]
+  desc: Hidden node dimensions (scalar, vector)
+edge_in_dim:
+  value: [131, 3]
+  desc: Input edge dimensions (scalar, vector)
+edge_h_dim:
+  value: [64, 4]
+  desc: Hidden edge dimensions (scalar, vector)
+num_layers:
+  value: 4
+  desc: Number of encoder/decoder layers
+heads:
+  value: 4
+  desc: Number of attention heads
+drop_rate:
+  value: 0.5
+  desc: Dropout rate
+out_dim:
+  value: 4
+  desc: Output dimension (4 RNA bases)
+
+# Dual-branch attention
+local_window:
+  value: 10
+  desc: Local exclusion window size
+length_threshold:
+  value: 150
+  desc: Length threshold for gating
+aux_loss_weight:
+  value: 0.3
+  desc: Auxiliary loss weight
+num_anchors:
+  value: 32
+  desc: Number of dynamic projection anchors
+
+# Training
+epochs:
+  value: 200
+  desc: Training epochs
+lr:
+  value: 0.0001
+  desc: Learning rate
+weight_decay:
+  value: 0
+  desc: L2 regularization weight
+label_smoothing:
+  value: 0.05
+  desc: Label smoothing
+batch_size:
+  value: 8
+  desc: Batch size
+num_workers:
+  value: 8
+  desc: Dataloader workers
+val_every:
+  value: 3
+  desc: Validation interval (epochs)
+patience:
+  value: 10
+  desc: Early stopping patience
+
+# Evaluation
+model_path:
+  value: ''
+  desc: Checkpoint path for evaluation
+evaluate:
+  value: False
+  desc: Run evaluation mode
+n_samples:
+  value: 16
+  desc: Number of samples for recovery
+temperature:
+  value: 0.1
+  desc: Sampling temperature
