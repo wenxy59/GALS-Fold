@@ -28,7 +28,6 @@ class RNAGraphFeaturizer(object):
 
     Args:
         split: train/validation/test split; coords are noised during training
-        radius: radial cutoff for drawing edges (currently not used)
         top_k: number of edges to draw per node as destination node
         num_rbf: number of radial basis functions
         num_posenc: number of positional encodings per edge
@@ -38,7 +37,6 @@ class RNAGraphFeaturizer(object):
     def __init__(
             self,
             split = 'train',
-            radius = 4.5,
             top_k = 16,
             num_rbf = 32,
             num_posenc = 32,
@@ -50,7 +48,6 @@ class RNAGraphFeaturizer(object):
         super().__init__()
 
         self.split = split
-        self.radius = radius
         self.top_k = top_k
         self.num_rbf = num_rbf
         self.num_posenc = num_posenc

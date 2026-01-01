@@ -1,8 +1,9 @@
 # Default training configuration
 
+# Checkpoint settings (leave empty to auto-generate as {model}_{split})
 checkpoint_prefix:
-  value: 'GALS_KFOLD1'
-  desc: Prefix for checkpoint filenames (e.g., 'kfold_1' -> 'kfold_1_best_checkpoint.h5')
+  value: ''
+  desc: 'Prefix for checkpoint filenames (auto: {model}_{split})'
 save_dir:
   value: './trainedmodels'
   desc: Directory to save model checkpoints
@@ -10,7 +11,7 @@ device:
   value: 'gpu'
   desc: Device (cpu/cuda/xpu)
 gpu:
-  value: 3
+  value: 0
   desc: GPU ID
 seed:
   value: 42
@@ -23,9 +24,6 @@ save:
 data_path:
   value: "./data/"
   desc: Data directory
-radius:
-  value: 4.5
-  desc: Local neighborhood radius (Angstrom)
 top_k:
   value: 32
   desc: Number of k-nearest neighbors
@@ -126,9 +124,6 @@ patience:
 model_path:
   value: ''
   desc: Checkpoint path for evaluation
-evaluate:
-  value: False
-  desc: Run evaluation mode
 n_samples:
   value: 16
   desc: Number of samples for recovery

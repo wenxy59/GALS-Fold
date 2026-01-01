@@ -1,0 +1,99 @@
+# Evaluation configuration for GALS-Fold
+
+# Model and split settings (paths are auto-generated from these)
+model:
+  value: 'GALS'
+  desc: Model type (GALS/GVPAtten)
+split:
+  value: 'kfold_1'
+  desc: Data split (kfold_1, kfold_2, kfold_3, kfold_4, kfold_5)
+
+# Auto-generated paths (leave empty to use defaults based on model and split)
+# If specified, these override the auto-generated paths
+output_dir:
+  value: ''
+  desc: 'Output directory (auto: ./statistics/testfasta/{model}_{split})'
+model_path:
+  value: ''
+  desc: 'Checkpoint path (auto: ./trainedmodels/{model}_{split}_best_checkpoint.h5)'
+test_index_file:
+  value: ''
+  desc: 'Test index file (auto: ./statistics/{split}_test_index.txt)'
+
+# Test data settings
+pdb_dir:
+  value: './data/raw'
+  desc: Directory containing PDB files
+
+# Inference settings
+n_samples:
+  value: 16
+  desc: Number of samples to generate per structure
+temperature:
+  value: 0.1
+  desc: Sampling temperature (lower = more deterministic)
+seed:
+  value: 0
+  desc: Random seed for reproducibility
+
+# Device settings
+gpu:
+  value: 0
+  desc: GPU ID (use CPU if not available)
+
+# Featurizer settings
+top_k:
+  value: 32
+  desc: Number of k-nearest neighbors
+num_rbf:
+  value: 32
+  desc: Number of radial basis functions
+num_posenc:
+  value: 32
+  desc: Number of positional encodings
+max_num_conformers:
+  value: 1
+  desc: Max conformations per sequence
+noise_scale:
+  value: 0.1
+  desc: Coordinate noise std (set to 0 for evaluation)
+
+# Model architecture (must match training config)
+node_in_dim:
+  value: [15, 4]
+  desc: Input node dimensions (scalar, vector)
+node_h_dim:
+  value: [128, 16]
+  desc: Hidden node dimensions (scalar, vector)
+edge_in_dim:
+  value: [131, 3]
+  desc: Input edge dimensions (scalar, vector)
+edge_h_dim:
+  value: [64, 4]
+  desc: Hidden edge dimensions (scalar, vector)
+num_layers:
+  value: 4
+  desc: Number of encoder/decoder layers
+drop_rate:
+  value: 0.5
+  desc: Dropout rate
+out_dim:
+  value: 4
+  desc: Output dimension (4 RNA bases)
+
+# GALS-specific parameters
+heads:
+  value: 4
+  desc: Number of attention heads
+num_anchors:
+  value: 32
+  desc: Number of dynamic projection anchors
+local_window:
+  value: 10
+  desc: Local exclusion window size
+length_threshold:
+  value: 150
+  desc: Length threshold for gating
+aux_loss_weight:
+  value: 0.3
+  desc: Auxiliary loss weight

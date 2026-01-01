@@ -29,7 +29,6 @@ class RNADesignDataset(data.Dataset):
     Args:
         data_list: List of data samples
         split: train/validation/test split; coords are noised during training
-        radius: radial cutoff for drawing edges (currently not used)
         top_k: number of edges to draw per node as destination node
         num_rbf: number of radial basis functions
 
@@ -40,7 +39,6 @@ class RNADesignDataset(data.Dataset):
             self,
             data_list = [],
             split = 'train',
-            radius = 4.5,
             top_k = 10,
             num_rbf = 16,
             num_posenc = 32,
@@ -60,7 +58,7 @@ class RNADesignDataset(data.Dataset):
         self.pyrimidine_bb_indices = pyrimidine_bb_indices
         self.purine_bb_indices = purine_bb_indices
         self.featurizer = RNAGraphFeaturizer(
-            split=split, radius=radius, top_k=top_k, num_rbf=num_rbf,
+            split=split, top_k=top_k, num_rbf=num_rbf,
             num_posenc=num_posenc, max_num_conformers=max_num_conformers,
             noise_scale=noise_scale, distance_eps=distance_eps, device=device
         )

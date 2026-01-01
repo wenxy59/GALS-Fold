@@ -112,15 +112,15 @@ In order to train your own models from scratch though, you still need to downloa
 
 ```bash
 # you can just start training with wandb as follows:
-python main.py --config configs/default.yaml checkpoint_prefix=GALS_KFOLD1 split=kfold_1 model=GALS
+python main.py --config configs/default.yaml split=kfold_1 model=GALS
 # for training without wandb logging, run in background:
-nohup python -u main.py --config configs/default.yaml checkpoint_prefix=GVPAtten_KFOLD1 split=kfold_1 model=GVPAtten --no_wandb > main.log 2>&1 &
+nohup python -u main.py --config configs/default.yaml split=kfold_1 model=GVPAtten --no_wandb > main.log 2>&1 &
 ```
 
 ### Evaluation
 
 ```bash
-python testmodel.py
+python evaluate.py model=GALS test_index_file=./statistics/kfold_1_test_index.txt gpu=0
 ```
 
 ## Architecture
@@ -252,6 +252,7 @@ This work builds upon several excellent open-source projects:
 
 - [gRNAde](https://github.com/chaitjo/geometric-rna-design) - Geometric RNA Design
 - [GVP](https://github.com/drorlab/gvp-pytorch) - Geometric Vector Perceptrons
+- [Transformer-LS](https://github.com/NVIDIA/transformer-ls)- Long-Short Transformer (Transformer-LS)
 - [RhoFold](https://github.com/ml4bio/RhoFold) - RNA Structure Prediction
 
 ---

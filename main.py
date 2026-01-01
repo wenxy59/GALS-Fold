@@ -44,67 +44,21 @@ def main(config, device):
     if config.model_path != '':
         model.load_state_dict(torch.load(config.model_path, map_location=device, weights_only=False))
     
-    if config.evaluate:
-        # Load test set
-        _, _, test_list = get_data_splits(config, split_type=config.split)
-        testset = get_dataset(config, test_list, split="test")
-        test_loader = get_dataloader(config, testset, shuffle=False)
+    # Get train, val, test data samples as lists
+    train_list, val_list, test_list = get_data_splits(config, split_type=config.split)
 
-        # Run evaluator + save designed structures
-        results = evaluate(
-            model, 
-            test_loader.dataset, 
-            config.n_samples, 
-            config.temperature, 
-            device, 
-            model_name="test",
-            metrics=['recovery', 'perplexity', 'sc_score_eternafold', 'sc_score_ribonanzanet', 'sc_score_rhofold'],
-            save_designs=True
-        )
-        df, samples_list, recovery_list, perplexity_list, \
-        scscore_list, scscore_ribonanza_list, \
-        scscore_rmsd_list, scscore_tm_list, scscore_gdt_list, \
-        rmsd_within_thresh, tm_within_thresh, gdt_within_thresh = results.values()
-        # Save results
-        torch.save(results, os.path.join(wandb.run.dir, f"test_results.pt"))
-        # Update wandb summary metrics
-        wandb.run.summary[f"best_test_recovery"] = np.mean(recovery_list)
-        wandb.run.summary[f"best_test_perplexity"] = np.mean(perplexity_list)
-        wandb.run.summary[f"best_test_scscore"] = np.mean(scscore_list)
-        wandb.run.summary[f"best_test_scscore_ribonanza"] = np.mean(scscore_ribonanza_list)
-        wandb.run.summary[f"best_test_scscore_rmsd"] = np.mean(scscore_rmsd_list)
-        wandb.run.summary[f"best_test_scscore_tm"] = np.mean(scscore_tm_list)
-        wandb.run.summary[f"best_test_scscore_gdt"] = np.mean(scscore_gdt_list)
-        wandb.run.summary[f"best_test_rmsd_within_thresh"] = np.mean(rmsd_within_thresh)
-        wandb.run.summary[f"best_test_tm_within_thresh"] = np.mean(tm_within_thresh)
-        wandb.run.summary[f"best_test_gdt_within_thresh"] = np.mean(gdt_within_thresh)
-        print(f"BEST test recovery: {np.mean(recovery_list):.4f}\
-                perplexity: {np.mean(perplexity_list):.4f}\
-                scscore: {np.mean(scscore_list):.4f}\
-                scscore_ribonanza: {np.mean(scscore_ribonanza_list):.4f}\
-                scscore_rmsd: {np.mean(scscore_rmsd_list):.4f}\
-                scscore_tm: {np.mean(scscore_tm_list):.4f}\
-                scscore_gdt: {np.mean(scscore_gdt_list):.4f}\
-                rmsd_within_thresh: {np.mean(rmsd_within_thresh):.4f}\
-                tm_within_thresh: {np.mean(tm_within_thresh):.4f}\
-                gdt_within_thresh: {np.mean(gdt_within_thresh):.4f}")
+    # Load datasets
+    trainset = get_dataset(config, train_list, split="train")
+    valset = get_dataset(config, val_list, split="val")
+    testset = get_dataset(config, test_list, split="test")
 
-    else:
-        # Get train, val, test data samples as lists
-        train_list, val_list, test_list = get_data_splits(config, split_type=config.split)
-
-        # Load datasets
-        trainset = get_dataset(config, train_list, split="train")
-        valset = get_dataset(config, val_list, split="val")
-        testset = get_dataset(config, test_list, split="test")
-
-        # Prepare dataloaders
-        train_loader = get_dataloader(config, trainset, shuffle=True)
-        val_loader = get_dataloader(config, valset, shuffle=False)
-        test_loader = get_dataloader(config, testset, shuffle=False)
+    # Prepare dataloaders
+    train_loader = get_dataloader(config, trainset, shuffle=True)
+    val_loader = get_dataloader(config, valset, shuffle=False)
+    test_loader = get_dataloader(config, testset, shuffle=False)
         
-        # Run trainer
-        train(config, model, train_loader, val_loader, test_loader, device)
+    # Run trainer
+    train(config, model, train_loader, val_loader, test_loader, device)
 
 
 def get_data_splits(config, split_type="kfold_1"):
@@ -134,7 +88,6 @@ def get_dataset(config, data_list, split="train"):
     return RNADesignDataset(
         data_list = data_list,
         split = split,
-        radius = config.radius,
         top_k = config.top_k,
         num_rbf = config.num_rbf,
         num_posenc = config.num_posenc,
@@ -194,7 +147,6 @@ def get_model(config):
         'out_dim': config.out_dim,
     }
 
-    # V10 parameters (only for AutoregressiveMultiGNNv1)
     if config.model == 'GALS':
         model_kwargs['heads'] = getattr(config, 'heads', 4)
         model_kwargs['num_anchors'] = getattr(config, 'num_anchors', 32)
@@ -266,6 +218,12 @@ if __name__ == "__main__":
         )
     config = wandb.config
     config.update(config_overrides, allow_val_change=True)
+
+    # Auto-generate checkpoint_prefix if not specified: {model}_{split}
+    if not config.get('checkpoint_prefix'):
+        auto_prefix = f"{config.model}_{config.split}"
+        config.update({'checkpoint_prefix': auto_prefix}, allow_val_change=True)
+
     config_str = "\nCONFIG"
     for key, val in config.items():
         config_str += f"\n    {key}: {val}"
