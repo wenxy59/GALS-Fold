@@ -246,10 +246,11 @@ def main(config, device):
         pdb_path = Path(config.pdb_dir) / f"{pdb_basename}.pdb"
         output_path = Path(config.output_dir) / f"{pdb_basename}.fasta"
 
-        print(f"[{i}/{len(pdb_basenames)}] {pdb_basename}", end=" ")
+        print(f"\n[{i}/{len(pdb_basenames)}] " + "="*50)
+        print(f"Processing: {pdb_path}")
 
         if not pdb_path.exists():
-            print("- SKIPPED (file not found)")
+            print(f"Warning: Input file does not exist, skipping...")
             failed_files.append(pdb_basename)
             continue
 
@@ -267,11 +268,14 @@ def main(config, device):
             all_perplexity.append(mean_perp)
             all_sc_score.append(mean_sc)
 
-            print(f"- Succeed (rec={mean_rec:.3f}, perp={mean_perp:.3f}, sc={mean_sc:.3f})")
+            print(f"Successfully processed {pdb_basename}")
+            print(f"  Recovery: {mean_rec:.4f}, Perplexity: {mean_perp:.4f}, SC Score: {mean_sc:.4f}")
+            print(f"Output file: {output_path}")
             success_count += 1
 
         except Exception as e:
-            print(f"- FAILED ({e})")
+            print(f"Failed to process {pdb_basename}")
+            print(f"Error: {e}")
             failed_files.append(pdb_basename)
 
     # Print summary

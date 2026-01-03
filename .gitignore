@@ -9,7 +9,7 @@ notebooks/
 .env.example
 tutorial/
 *.log
-
+trainedmodels
 mymodel/
 !kfold_1_split.pt
 !kfold_2_split.pt

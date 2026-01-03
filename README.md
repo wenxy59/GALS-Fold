@@ -229,7 +229,7 @@ We have provided the splits used in our experiments in the `data/` directory as 
 We use RNA structures from the PDB, processed following k-fold strategy. In the experiments, 5-fold cross-validation with structure-based clustering ensures no data leakage and evaluates generalization performance.
 
 <p align="center">
-  <img src="./statistics/kfold_comparison.png" width="80%" />
+  <img src="./statistics/kfold_comparison.png" width="90%" />
 </p>
 
 
