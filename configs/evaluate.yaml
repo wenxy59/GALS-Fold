@@ -1,4 +1,5 @@
 # Evaluation configuration for GALS-Fold
+# Test data is loaded directly from processed.pt (consistent with training)
 
 # Model and split settings (paths are auto-generated from these)
 model:
@@ -16,14 +17,6 @@ output_dir:
 model_path:
   value: ''
   desc: 'Checkpoint path (auto: ./trainedmodels/{model}_{split}_best_checkpoint.h5)'
-test_index_file:
-  value: ''
-  desc: 'Test index file (auto: ./statistics/{split}_test_index.txt)'
-
-# Test data settings
-pdb_dir:
-  value: './data/raw'
-  desc: Directory containing PDB files
 
 # Inference settings
 n_samples:
