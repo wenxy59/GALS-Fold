@@ -15,8 +15,10 @@ from biotite.structure import dot_bracket_from_structure
 
 from src.constants import (
     PROJECT_PATH,
-    X3DNA_PATH, 
-    ETERNAFOLD_PATH, 
+    X3DNA_PATH,
+    ETERNAFOLD_PATH,
+    LINEARFOLD_PATH,
+    LINEARFOLD_LENGTH_THRESHOLD,
     DOTBRACKET_TO_NUM
 )
 
@@ -104,12 +106,67 @@ def x3dna_to_sec_struct(output: List[str], sequence: str) -> str:
     return "".join(sec_struct)
 
 
-def predict_sec_struct(
+def predict_sec_struct_linearfold(
+        sequence: str,
+        linearfold_path: str = os.path.join(LINEARFOLD_PATH, "linearfold"),
+        use_vienna_params: bool = False,
+        beam_size: int = 100,
+    ) -> List[str]:
+    """
+    Predict secondary structure using LinearFold.
+
+    LinearFold has O(N) time complexity, making it suitable for long sequences.
+
+    Args:
+        sequence (str): RNA sequence (can contain T, will be converted to U).
+        linearfold_path (str): Path to LinearFold executable.
+        use_vienna_params (bool): If True, use Vienna energy model; else use CONTRAfold model.
+        beam_size (int): Beam size for beam search (larger = more accurate but slower).
+
+    Returns:
+        List[str]: List containing the predicted secondary structure in dot-bracket notation.
+    """
+    # Convert T to U (LinearFold uses RNA alphabet)
+    sequence = sequence.upper().replace('T', 'U')
+
+    # Build command
+    cmd_args = [linearfold_path]
+    if use_vienna_params:
+        cmd_args.append("-V")
+    cmd_args.extend(["-b", str(beam_size)])
+
+    # Run LinearFold
+    process = subprocess.run(
+        cmd_args,
+        input=sequence,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Parse output
+    # LinearFold output format:
+    # Line 1: sequence
+    # Line 2: structure (energy)
+    output_lines = process.stdout.strip().split("\n")
+    if len(output_lines) >= 2:
+        # Extract structure from second line (format: "...((...))... (-1.23)")
+        structure_line = output_lines[-1]
+        # Remove energy part (the part with parentheses containing a number)
+        structure = structure_line.split()[0]
+    else:
+        # Fallback: return all unpaired
+        structure = '.' * len(sequence)
+
+    return [structure]
+
+
+def predict_sec_struct_eternafold(
         sequence: Optional[str] = None,
         fasta_file_path: Optional[str] = None,
         eternafold_path: str = os.path.join(ETERNAFOLD_PATH, "src/contrafold"),
         n_samples: int = 1,
-    ) -> str:
+    ) -> List[str]:
     """
     Predict secondary structure using EternaFold.
 
@@ -165,6 +222,65 @@ def predict_sec_struct(
         return output.split("\n")[:-1]
     else:
         return [output.split("\n")[-2]]
+
+
+def predict_sec_struct(
+        sequence: Optional[str] = None,
+        fasta_file_path: Optional[str] = None,
+        n_samples: int = 1,
+        length_threshold: int = LINEARFOLD_LENGTH_THRESHOLD,
+        force_tool: Optional[Literal["eternafold", "linearfold"]] = None,
+    ) -> List[str]:
+    """
+    Predict secondary structure using the appropriate tool based on sequence length.
+
+    - For sequences <= length_threshold: use EternaFold (more accurate)
+    - For sequences > length_threshold: use LinearFold (O(N) complexity, handles long sequences)
+
+    Args:
+        sequence (str, optional): Sequence of RNA molecule.
+        fasta_file_path (str, optional): Path to fasta file (only for EternaFold).
+        n_samples (int): Number of samples (only supported by EternaFold, must be 1 or 100).
+        length_threshold (int): Length threshold for switching tools. Default: LINEARFOLD_LENGTH_THRESHOLD.
+        force_tool (str, optional): Force use of specific tool ("eternafold" or "linearfold").
+
+    Returns:
+        List[str]: List of predicted secondary structures in dot-bracket notation.
+    """
+    # Determine sequence length
+    if sequence is not None:
+        seq_len = len(sequence)
+    elif fasta_file_path is not None:
+        # Read sequence from fasta to get length
+        record = next(SeqIO.parse(fasta_file_path, "fasta"))
+        seq_len = len(record.seq)
+        sequence = str(record.seq)
+    else:
+        raise ValueError("Either sequence or fasta_file_path must be provided")
+
+    # Determine which tool to use
+    if force_tool == "linearfold":
+        use_linearfold = True
+    elif force_tool == "eternafold":
+        use_linearfold = False
+    else:
+        # Auto-select based on length
+        use_linearfold = seq_len > length_threshold
+
+    # Use LinearFold for long sequences
+    if use_linearfold:
+        if n_samples > 1:
+            # LinearFold doesn't support sampling, just return the same structure n times
+            structure = predict_sec_struct_linearfold(sequence)[0]
+            return [structure] * n_samples
+        return predict_sec_struct_linearfold(sequence)
+
+    # Use EternaFold for short sequences
+    return predict_sec_struct_eternafold(
+        sequence=sequence,
+        fasta_file_path=None,  # We already have the sequence
+        n_samples=n_samples,
+    )
 
 
 def dotbracket_to_paired(sec_struct: str) -> np.ndarray:

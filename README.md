@@ -82,6 +82,12 @@ make
 # Download RhoFold checkpoint
 cd ~/GALS-Fold/tools/rhofold/
 gdown https://drive.google.com/uc?id=1To2bjbhQLFx1k8hBOW5q1JFq6ut27XEv
+
+# Download LinearFold
+cd ~/GALS-Fold/tools/
+git clone https://github.com/LinearFold/LinearFold.git
+cd LinearFold
+make
 ```
 
 Then set up some extra tools and dependencies.

@@ -10,6 +10,12 @@ X3DNA_PATH = os.environ.get("X3DNA")
 
 ETERNAFOLD_PATH = os.environ.get("ETERNAFOLD")
 
+LINEARFOLD_PATH = os.environ.get("LINEARFOLD")
+
+# Length threshold for switching from EternaFold to LinearFold
+# Sequences longer than this will use LinearFold (O(N) complexity)
+LINEARFOLD_LENGTH_THRESHOLD = 1000
+
 
 # Value to fill missing coordinate entries when reading PDB files
 FILL_VALUE = 1e-5

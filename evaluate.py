@@ -43,7 +43,7 @@ from Bio.SeqRecord import SeqRecord
 from src.data.featurizer import RNAGraphFeaturizer
 from src.data.data_utils import get_backbone_coords
 from src.evaluator import edit_distance, self_consistency_score_eternafold
-from src.models import GeometricLongShortRNA, GVPAttentionShortBranch
+from src.models import GeometricLongShortRNA, GVPAttentionShortBranch, gRNAde
 from src.constants import NUM_TO_LETTER, RNA_ATOMS, FILL_VALUE, DATA_PATH
 
 
@@ -73,9 +73,9 @@ def load_config(config_path, overrides=None):
     if not config.get('output_dir'):
         config['output_dir'] = f'./statistics/testfasta/{model}_{split}'
 
-    # Auto-generate model_path: ./trainedmodels/{model}_{split}_best_checkpoint.h5
+    # Auto-generate model_path: ./checkpoint/{model}_{split}_best_checkpoint.h5
     if not config.get('model_path'):
-        config['model_path'] = f'./trainedmodels/{model}_{split}_best_checkpoint.h5'
+        config['model_path'] = f'./checkpoint/{model}_{split}_best_checkpoint.h5'
 
     # Auto-generate test_index_file: ./statistics/{split}_test_index.txt
     if not config.get('test_index_file'):
@@ -100,6 +100,7 @@ def get_model(config):
     model_class = {
         'GALS': GeometricLongShortRNA,
         'GVPAtten': GVPAttentionShortBranch,
+        'gRNAde': gRNAde,
     }[config.model]
     
     model_kwargs = {

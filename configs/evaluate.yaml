@@ -4,7 +4,7 @@
 # Model and split settings (paths are auto-generated from these)
 model:
   value: 'GALS'
-  desc: Model type (GALS/GVPAtten)
+  desc: Model type (GALS/GVPAtten/gRNAde)
 split:
   value: 'kfold_1'
   desc: Data split (kfold_1, kfold_2, kfold_3, kfold_4, kfold_5)
@@ -16,7 +16,7 @@ output_dir:
   desc: 'Output directory (auto: ./statistics/testfasta/{model}_{split})'
 model_path:
   value: ''
-  desc: 'Checkpoint path (auto: ./trainedmodels/{model}_{split}_best_checkpoint.h5)'
+  desc: 'Checkpoint path (auto: ./checkpoint/{model}_{split}_best_checkpoint.h5)'
 
 # Inference settings
 n_samples:

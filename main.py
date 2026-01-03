@@ -21,6 +21,7 @@ from src.data.dataset import RNADesignDataset, BatchSampler
 from src.models import (
     GeometricLongShortRNA,
     GVPAttentionShortBranch,
+    gRNAde,
 )
 from src.constants import DATA_PATH
 
@@ -134,6 +135,7 @@ def get_model(config):
     model_class = {
         'GALS' : GeometricLongShortRNA,
         'GVPAtten': GVPAttentionShortBranch,
+        'gRNAde': gRNAde,
     }[config.model]
 
     # Base parameters

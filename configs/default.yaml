@@ -54,7 +54,7 @@ split:
 # Model architecture
 model:
   value: 'GALS'
-  desc: Model type (GALS/GVPAtten)
+  desc: Model type (GALS/GVPAtten/gRNAde)
 node_in_dim:
   value: [15, 4]
   desc: Input node dimensions (scalar, vector)

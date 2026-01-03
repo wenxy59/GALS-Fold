@@ -436,6 +436,123 @@ class GVPAttentionConv(MessagePassing):
         return torch.cat([msg_s_flat, msg_v_flat], dim=-1)
 
 ########################################################################
+class gRNAdeLayer(nn.Module):
+    '''
+    GVPConvLayer for handling multiple conformations (encoder-only)
+    '''
+    def __init__(
+            self, 
+            node_dims, 
+            edge_dims,
+            n_message=3, 
+            n_feedforward=2, 
+            drop_rate=.1,
+            activations=(F.silu, torch.sigmoid), 
+            vector_gate=True,
+            residual=True,
+            norm_first=False,
+        ):
+        super(MultigRNAdeConvLayer, self).__init__()
+        self.conv = MultigRNAdeConv(node_dims, node_dims, edge_dims, n_message,
+                                 aggr="mean", activations=activations, vector_gate=vector_gate)
+        GVP_ = functools.partial(GVP, 
+                activations=activations, vector_gate=vector_gate)
+        self.norm = nn.ModuleList([LayerNorm(node_dims) for _ in range(2)])
+        self.dropout = nn.ModuleList([Dropout(drop_rate) for _ in range(2)])
+
+        ff_func = []
+        if n_feedforward == 1:
+            ff_func.append(GVP_(node_dims, node_dims))
+        else:
+            hid_dims = 4*node_dims[0], 2*node_dims[1]
+            ff_func.append(GVP_(node_dims, hid_dims))
+            for i in range(n_feedforward-2):
+                ff_func.append(GVP_(hid_dims, hid_dims))
+            ff_func.append(GVP_(hid_dims, node_dims, activations=(None, None)))
+        self.ff_func = nn.Sequential(*ff_func)
+        self.residual = residual
+        self.norm_first = norm_first
+
+    def forward(self, x, edge_index, edge_attr):
+        '''
+        :param x: tuple (s, V) of `torch.Tensor`
+        :param edge_index: array of shape [2, n_edges]
+        :param edge_attr: tuple (s, V) of `torch.Tensor`
+        '''
+        if self.norm_first:
+            dh = self.conv(self.norm[0](x), edge_index, edge_attr)
+            x = tuple_sum(x, self.dropout[0](dh))
+            dh = self.ff_func(self.norm[1](x))
+            x = tuple_sum(x, self.dropout[1](dh))
+        else:
+            dh = self.conv(x, edge_index, edge_attr)
+            x = self.norm[0](tuple_sum(x, self.dropout[0](dh))) if self.residual else dh
+            dh = self.ff_func(x)
+            x = self.norm[1](tuple_sum(x, self.dropout[1](dh))) if self.residual else dh
+        return x
+
+class MultigRNAdeConv(MessagePassing):
+    '''
+    GVPConv for handling multiple conformations
+    '''
+    def __init__(self, in_dims, out_dims, edge_dims,
+                 n_layers=3, module_list=None, aggr="mean", 
+                 activations=(F.silu, torch.sigmoid), vector_gate=True):
+        super(MultigRNAdeConv, self).__init__(aggr=aggr)
+        self.si, self.vi = in_dims
+        self.so, self.vo = out_dims
+        self.se, self.ve = edge_dims
+        
+        GVP_ = functools.partial(GVP, 
+                activations=activations, vector_gate=vector_gate)
+        
+        module_list = module_list or []
+        if not module_list:
+            if n_layers == 1:
+                module_list.append(
+                    GVP_((2*self.si + self.se, 2*self.vi + self.ve), 
+                        (self.so, self.vo)))
+            else:
+                module_list.append(
+                    GVP_((2*self.si + self.se, 2*self.vi + self.ve), out_dims)
+                )
+                for i in range(n_layers - 2):
+                    module_list.append(GVP_(out_dims, out_dims))
+                module_list.append(GVP_(out_dims, out_dims,
+                                       activations=(None, None)))
+        self.message_func = nn.Sequential(*module_list)
+
+    def forward(self, x, edge_index, edge_attr):
+        '''
+        :param x: tuple (s, V) of `torch.Tensor`
+        :param edge_index: array of shape [2, n_edges]
+        :param edge_attr: tuple (s, V) of `torch.Tensor`
+        '''
+        x_s, x_v = x
+        n_conf = x_s.shape[1]
+        
+        # x_s: [n_nodes, n_conf, d] -> [n_nodes, n_conf * d]
+        x_s = x_s.contiguous().view(x_s.shape[0], x_s.shape[1] * x_s.shape[2])        
+        # x_v: [n_nodes, n_conf, d, 3] -> [n_nodes, n_conf * d * 3]
+        x_v = x_v.contiguous().view(x_v.shape[0], x_v.shape[1] * x_v.shape[2] * 3)
+        
+        message = self.propagate(edge_index, s=x_s, v=x_v, edge_attr=edge_attr)
+        
+        return _split_multi(message, self.so, self.vo, n_conf)
+
+    def message(self, s_i, v_i, s_j, v_j, edge_attr):
+        # [n_nodes, n_conf * d] -> [n_nodes, n_conf, d]
+        s_i = s_i.view(s_i.shape[0], s_i.shape[1]//self.si, self.si)
+        s_j = s_j.view(s_j.shape[0], s_j.shape[1]//self.si, self.si)
+        # [n_nodes, n_conf * d * 3] -> [n_nodes, n_conf, d, 3]
+        v_i = v_i.view(v_i.shape[0], v_i.shape[1]//(self.vi * 3), self.vi, 3)
+        v_j = v_j.view(v_j.shape[0], v_j.shape[1]//(self.vi * 3), self.vi, 3)
+
+        message = tuple_cat((s_j, v_j), edge_attr, (s_i, v_i))
+        message = self.message_func(message)
+        return _merge_multi(*message)
+
+########################################################################
 class GatedDynamicProjection(nn.Module):
     """
     Geometry-aware linear attention with dynamic projection for O(N) complexity.
