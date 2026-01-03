@@ -15,6 +15,14 @@ Usage:
         model_path=./custom/path/to/model.h5
 """
 
+import dotenv
+dotenv.load_dotenv(".env")
+
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import os
 import sys
 import yaml
@@ -23,7 +31,6 @@ import argparse
 import numpy as np
 from pathlib import Path
 from types import SimpleNamespace
-
 import torch
 import torch.nn.functional as F
 import torch_geometric
@@ -260,7 +267,7 @@ def main(config, device):
             all_perplexity.append(mean_perp)
             all_sc_score.append(mean_sc)
 
-            print(f"- OK (rec={mean_rec:.3f}, perp={mean_perp:.3f}, sc={mean_sc:.3f})")
+            print(f"- Succeed (rec={mean_rec:.3f}, perp={mean_perp:.3f}, sc={mean_sc:.3f})")
             success_count += 1
 
         except Exception as e:

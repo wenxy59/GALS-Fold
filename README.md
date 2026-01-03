@@ -8,6 +8,7 @@
   <a href="#experiments">Experiments</a>
 </p>
 
+
 ---
 
 ## Overview
@@ -15,8 +16,9 @@
 **GALS-Fold** is a novel deep learning framework for RNA inverse folding—the task of designing RNA sequences that fold into a given 3D backbone structure. Unlike existing methods that suffer from either quadratic complexity (limiting scalability to long sequences) or loss of geometric precision (compromising design quality), GALS-Fold achieves **O(N) linear complexity** while preserving **SE(3)-equivariant geometric reasoning**.
 
 <p align="center">
-  <img src="./statistics/Framework.png" width="100%" />
+  <img src="./statistics/Framework.png" width="80%" />
 </p>
+
 
 
 ### Key Contributions
@@ -120,7 +122,10 @@ nohup python -u main.py --config configs/default.yaml split=kfold_1 model=GVPAtt
 ### Evaluation
 
 ```bash
-python evaluate.py model=GALS test_index_file=./statistics/kfold_1_test_index.txt gpu=0
+python evaluate.py model=GALS split=kfold_1 gpu=0
+
+# Or you can start multiple processing
+nohup sh -c 'python -u evaluate.py model=GALS split=kfold_5 > evalgals5.log 2>&1 ; python -u evaluate.py model=GVPAtten split=kfold_2 > evalgvpa2.log 2>&1 ; python -u evaluate.py model=GVPAtten split=kfold_3 > evalgvpa3.log 2>&1 ; python -u evaluate.py model=GVPAtten split=kfold_4 > evalgvpa4.log 2>&1 ; python -u evaluate.py model=GVPAtten split=kfold_5 > evalgvpa5.log 2>&1' &
 ```
 
 ## Architecture
@@ -169,12 +174,13 @@ GALS-Fold employs a **Dual-Stream Parallel Residual** architecture within each e
 
 ### Metrics
 
-| Metric         | Description                                                  |
-| -------------- | ------------------------------------------------------------ |
-| **Recovery**   | Sequence identity between designed and native sequences      |
-| **SC-Score**   | Self-consistency: fold designed sequence, compare to target structure |
+| Metric       | Description                                                  |
+| ------------ | ------------------------------------------------------------ |
+| **Recovery** | Sequence identity between designed and native sequences      |
+| **SC-Score** | Self-consistency: fold designed sequence, compare to target structure |
 
 ---
+
 ### Downloading and Preparing Data
 
 The model is trained on all RNA structures from the PDB at ≤4A resolution downloaded via [RNASolo](https://rnasolo.cs.put.poznan.pl) with date cutoff: 31 October 2023.
@@ -195,6 +201,7 @@ Next, process the raw PDB files into ML-ready format, which will be saved under 
 cd ~/GALS-Fold/
 python data/process_data.py
 ```
+
 Each RNA will be processed into the following format (most of the metadata is optional for inverse folding):
 
 ```python
@@ -222,8 +229,9 @@ We have provided the splits used in our experiments in the `data/` directory as 
 We use RNA structures from the PDB, processed following k-fold strategy. In the experiments, 5-fold cross-validation with structure-based clustering ensures no data leakage and evaluates generalization performance.
 
 <p align="center">
-  <img src="./statistics/kfold_comparison.png" width="100%" />
+  <img src="./statistics/kfold_comparison.png" width="80%" />
 </p>
+
 
 The scripts for creating and visualizing the splits can be found in the `data/` directory. The exact PDB IDs used for each test splits are also available in the `statistics/` directory.
 
@@ -260,10 +268,3 @@ This work builds upon several excellent open-source projects:
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-<p align="center">
-  <sub>Built with ❤️ for the AI4Science community</sub>
-</p>
-
