@@ -1,5 +1,6 @@
 import os
 import subprocess
+import tempfile
 from datetime import datetime
 import numpy as np
 import wandb
@@ -183,12 +184,15 @@ def predict_sec_struct_eternafold(
     """
     if sequence is not None:
         assert fasta_file_path is None
-        # Write sequence to temporary fasta file
-        current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Write sequence to temporary fasta file using tempfile for unique naming
         try:
-            fasta_file_path = os.path.join(wandb.run.dir, f"temp_{current_datetime}.fasta")
+            temp_dir = wandb.run.dir
         except AttributeError:
-            fasta_file_path = os.path.join(PROJECT_PATH, f"temp_{current_datetime}.fasta")
+            temp_dir = PROJECT_PATH
+
+        # Create a unique temporary file to avoid conflicts in concurrent execution
+        fd, fasta_file_path = tempfile.mkstemp(suffix='.fasta', prefix='temp_', dir=temp_dir)
+        os.close(fd)  # Close the file descriptor, we'll write using SeqIO
         SeqIO.write(
             SeqRecord(Seq(sequence), id="temp"),
             fasta_file_path, "fasta"

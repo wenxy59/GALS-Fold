@@ -452,7 +452,7 @@ class gRNAdeLayer(nn.Module):
             residual=True,
             norm_first=False,
         ):
-        super(MultigRNAdeConvLayer, self).__init__()
+        super(gRNAdeLayer, self).__init__()
         self.conv = MultigRNAdeConv(node_dims, node_dims, edge_dims, n_message,
                                  aggr="mean", activations=activations, vector_gate=vector_gate)
         GVP_ = functools.partial(GVP, 
@@ -1176,3 +1176,21 @@ def _merge(s, v):
     """Merge tuple (s, V) into single tensor."""
     v = v.contiguous().view(v.shape[0], v.shape[1] * 3)
     return torch.cat([s, v], -1)
+
+def _merge_multi(s, v):
+    '''
+    _merge for multiple conformers
+    '''
+    # s: [n_nodes, n_conf, d] -> [n_nodes, n_conf * d]
+    s = s.contiguous().view(s.shape[0], s.shape[1] * s.shape[2])
+    # v: [n_nodes, n_conf, d, 3] -> [n_nodes, n_conf * d * 3]
+    v = v.contiguous().view(v.shape[0], v.shape[1] * v.shape[2] * 3)
+    return torch.cat([s, v], -1)
+
+def _split_multi(x, ns, nv, n_conf=5):
+    '''
+    _split for multiple conformers
+    '''
+    s = x[..., :-3 * nv * n_conf].contiguous().view(x.shape[0], n_conf, ns)
+    v = x[..., -3 * nv * n_conf:].contiguous().view(x.shape[0], n_conf, nv, 3)
+    return s, v
