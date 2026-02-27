@@ -1,4 +1,4 @@
-# GALS-Fold: Geometry-Aware Long-Short RNA Inverse Folding with Linear Complexity
+# GALS-Fold: Geometry-Aware Long-Short RNA Inverse Folding with Linear Scaling
 
 <p align="center">
   <a href="#overview">Overview</a> •
