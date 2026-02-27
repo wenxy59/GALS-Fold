@@ -74,7 +74,11 @@ def train(
         model.train()
         train_loss, train_acc, train_confusion, train_aux_loss = loop(
             model, train_loader, train_loss_fn, optimizer, device, aux_loss_weight)
-        print_and_log(epoch, train_loss, train_acc, train_confusion, lr=lr, mode="train",
+
+        # Get current learning rate
+        current_lr = optimizer.param_groups[0]['lr']
+
+        print_and_log(epoch, train_loss, train_acc, train_confusion, lr=current_lr, mode="train",
                       lookup=lookup, aux_loss=train_aux_loss if aux_loss_weight > 0 else None)
 
         if epoch % config.val_every == 0 or epoch == config.epochs - 1:
@@ -84,7 +88,7 @@ def train(
 
                 # Evaluate on validation set
                 val_loss, val_acc, val_confusion, _ = loop(model, val_loader, eval_loss_fn, None, device)
-                print_and_log(epoch, val_loss, val_acc, val_confusion, mode="val", lookup=lookup)
+                print_and_log(epoch, val_loss, val_acc, val_confusion, lr=current_lr, mode="val", lookup=lookup)
 
                 # LR scheduler step
                 scheduler.step(val_acc)
@@ -96,13 +100,14 @@ def train(
                     best_epoch, best_val_loss, best_val_acc = epoch, val_loss, val_acc
 
                     test_loss, test_acc, test_confusion, _ = loop(model, test_loader, eval_loss_fn, None, device)
-                    print_and_log(epoch, test_loss, test_acc, test_confusion, mode="test", lookup=lookup)
+                    print_and_log(epoch, test_loss, test_acc, test_confusion, lr=current_lr, mode="test", lookup=lookup)
 
                     wandb.run.summary["best_epoch"] = best_epoch
                     wandb.run.summary["best_val_perp"] = np.exp(best_val_loss)
                     wandb.run.summary["best_val_acc"] = best_val_acc
                     wandb.run.summary["best_test_perp"] = np.exp(test_loss)
                     wandb.run.summary["best_test_acc"] = test_acc
+                    wandb.run.summary["best_test_loss"] = test_loss
 
                     if config.save:
                         checkpoint_path = os.path.join(save_dir, f"{ckpt_prefix}best_checkpoint.h5")
@@ -210,7 +215,9 @@ def print_and_log(
 
     if lr is not None:
         log_str += f" lr: {lr:.6f}"
-        wandb_metrics["lr"] = lr
+        # Log learning rate with consistent key for all modes
+        wandb_metrics["learning_rate"] = lr
+        wandb_metrics[f"{mode}/lr"] = lr
 
     if recovery is not None:
         log_str += f" rec: {np.mean(recovery):.4f}"
@@ -222,7 +229,9 @@ def print_and_log(
 
     print(log_str)
     print_confusion(confusion, lookup=lookup)
-    wandb.log(wandb_metrics)
+
+    # Log metrics with step=epoch for proper time series visualization
+    wandb.log(wandb_metrics, step=epoch)
 
 
 def print_confusion(mat, lookup):

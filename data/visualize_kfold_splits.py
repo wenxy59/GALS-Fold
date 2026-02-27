@@ -208,5 +208,3 @@ if __name__ == "__main__":
     summary_df = create_summary_table(df, splits, K_FOLDS)
     summary_df.to_csv(os.path.join(OUTPUT_DIR, "kfold_summary.csv"), index=False)
     print(f"Saved {OUTPUT_DIR}/kfold_summary.csv")
-
-    print("Done!")

@@ -1,10 +1,10 @@
 # Evaluation configuration for GALS-Fold
-# Test data is loaded directly from processed.pt (consistent with training)
+# Test data is loaded directly from processed.pt
 
 # Model and split settings (paths are auto-generated from these)
 model:
   value: 'GALS'
-  desc: Model type (GALS/GVPAtten/gRNAde)
+  desc: Model type (GALS)
 split:
   value: 'kfold_1'
   desc: Data split (kfold_1, kfold_2, kfold_3, kfold_4, kfold_5)
@@ -48,7 +48,7 @@ max_num_conformers:
   value: 1
   desc: Max conformations per sequence
 noise_scale:
-  value: 0.1
+  value: 0.05
   desc: Coordinate noise std (set to 0 for evaluation)
 
 # Model architecture (must match training config)
@@ -68,7 +68,7 @@ num_layers:
   value: 4
   desc: Number of encoder/decoder layers
 drop_rate:
-  value: 0.5
+  value: 0.3
   desc: Dropout rate
 out_dim:
   value: 4
@@ -79,7 +79,7 @@ heads:
   value: 4
   desc: Number of attention heads
 num_anchors:
-  value: 32
+  value: 64
   desc: Number of dynamic projection anchors
 local_window:
   value: 10

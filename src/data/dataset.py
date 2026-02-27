@@ -115,18 +115,28 @@ class BatchSampler(data.Sampler):
             node_counts, 
             max_nodes_batch=3000, 
             max_nodes_sample=5000,
-            shuffle=True
+            shuffle=True,
+            length_bins=None,
+            length_weights=None
         ):
         
         self.node_counts = node_counts
         self.shuffle = shuffle
         self.max_nodes_batch = max_nodes_batch
         self.max_nodes_sample = max_nodes_sample
+        self.length_bins = list(length_bins) if length_bins else []
+        self.length_weights = list(length_weights) if length_weights else []
+
+        if self.length_bins and self.length_weights:
+            if len(self.length_weights) != len(self.length_bins) + 1:
+                raise ValueError(
+                    "length_weights must have length len(length_bins) + 1"
+                )
 
         # indices of samples with node count <= max_nodes_batch
         max_nodes = min(max_nodes_batch, max_nodes_sample)
-        self.idx = [i for i in range(len(node_counts))  
-                        if node_counts[i] <= max_nodes]
+        self.base_idx = [i for i in range(len(node_counts))
+                         if node_counts[i] <= max_nodes]
         # [indices] of samples with max_nodes_sample >= node count > max_nodes_batch
         # appended to list of batches at the end
         self.batches_single = [[i] for i in range(len(node_counts)) 
@@ -137,12 +147,28 @@ class BatchSampler(data.Sampler):
             # append single samples to batches list
             self.batches += self.batches_single
             if self.shuffle: random.shuffle(self.batches)
-    
+
+    def _length_weight(self, length):
+        if not (self.length_bins and self.length_weights):
+            return 1.0
+        for cutoff, weight in zip(self.length_bins, self.length_weights):
+            if length <= cutoff:
+                return weight
+        return self.length_weights[-1]
+
+    def _sample_indices(self):
+        idx = list(self.base_idx)
+        if self.length_bins and self.length_weights:
+            weights = [self._length_weight(self.node_counts[i]) for i in idx]
+            if len(set(weights)) != 1:
+                idx = random.choices(idx, weights=weights, k=len(idx))
+        if self.shuffle:
+            random.shuffle(idx)
+        return idx
+
     def _form_batches(self):
         self.batches = []
-        if self.shuffle: random.shuffle(self.idx)
-        
-        idx = self.idx
+        idx = self._sample_indices()
         while idx:
             batch = []
             n_nodes = 0

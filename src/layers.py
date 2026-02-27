@@ -1,15 +1,10 @@
-################################################################
-# Generalisation of Geometric Vector Perceptron, Jing et al.
-# for explicit multi-state biomolecule representation learning.
-# Original repository: https://github.com/drorlab/gvp-pytorch
-################################################################
+# GVP-based layers for GALS-Fold.
 
 import functools
 import warnings
 import torch
 from torch import nn
 import torch.nn.functional as F
-import torch_geometric
 from torch_geometric.nn import MessagePassing
 from typing import Optional
 from torch_geometric.utils import softmax
@@ -18,13 +13,7 @@ import math
 #########################################################################
 
 class SinusoidalPositionalEmbedding(nn.Module):
-    """
-    Sinusoidal positional encoding for sequence position awareness.
-
-    Args:
-        max_positions: Maximum sequence length supported.
-        embedding_dim: Dimension of positional encoding (should match scalar_dim).
-    """
+    """Sinusoidal positional encoding."""
     def __init__(self, max_positions: int = 3000, embedding_dim: int = 128):
         super().__init__()
         self.embedding_dim = embedding_dim
@@ -44,15 +33,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, n_nodes, batch_index=None, device=None):
-        """
-        Args:
-            n_nodes: Total number of nodes.
-            batch_index: [n_nodes] batch assignment for batched graphs.
-            device: Target device.
-
-        Returns:
-            Tensor of shape [n_nodes, embedding_dim].
-        """
+        """Return [n_nodes, embedding_dim] positional encoding."""
         if device is None:
             device = self.pe.device
 
@@ -72,19 +53,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
 #########################################################################
 
 class GVPConvLayer(nn.Module):
-    """
-    GVP message passing layer with residual updates and feedforward network.
-
-    Args:
-        node_dims: Node embedding dimensions (n_scalar, n_vector).
-        edge_dims: Edge embedding dimensions (n_scalar, n_vector).
-        n_message: Number of GVPs in message function.
-        n_feedforward: Number of GVPs in feedforward network.
-        drop_rate: Dropout probability.
-        autoregressive: If True, uses separate embeddings for src >= dst edges.
-        activations: Tuple (scalar_act, vector_act).
-        vector_gate: Whether to use vector gating.
-    """
+    """GVP message passing with residual + feedforward."""
     def __init__(
             self, 
             node_dims, 
@@ -114,7 +83,7 @@ class GVPConvLayer(nn.Module):
         else:
             hid_dims = 4*node_dims[0], 2*node_dims[1]
             ff_func.append(GVP_(node_dims, hid_dims))
-            for i in range(n_feedforward-2):
+            for _ in range(n_feedforward-2):
                 ff_func.append(GVP_(hid_dims, hid_dims))
             ff_func.append(GVP_(hid_dims, node_dims, activations=(None, None)))
         self.ff_func = nn.Sequential(*ff_func)
@@ -123,14 +92,7 @@ class GVPConvLayer(nn.Module):
 
     def forward(self, x, edge_index, edge_attr,
                 autoregressive_x=None, node_mask=None):
-        """
-        Args:
-            x: Tuple (s, V) node features.
-            edge_index: [2, E] edge indices.
-            edge_attr: Tuple (s, V) edge features.
-            autoregressive_x: Optional separate embeddings for src >= dst edges.
-            node_mask: Optional bool mask for selective node updates.
-        """
+        """Apply message passing and feedforward updates."""
         
         if autoregressive_x is not None:
             src, dst = edge_index
@@ -175,19 +137,7 @@ class GVPConvLayer(nn.Module):
         return x
 
 class GVPConv(MessagePassing):
-    """
-    GVP message passing without residual/feedforward (see GVPConvLayer).
-
-    Args:
-        in_dims: Input node dimensions (n_scalar, n_vector).
-        out_dims: Output node dimensions (n_scalar, n_vector).
-        edge_dims: Edge dimensions (n_scalar, n_vector).
-        n_layers: Number of GVPs in message function.
-        module_list: Preconstructed message function (overrides n_layers).
-        aggr: Aggregation method ("add" for autoregressive, "mean" otherwise).
-        activations: Tuple (scalar_act, vector_act).
-        vector_gate: Whether to use vector gating.
-    """
+    """GVP message passing block (no residual/FFN)."""
     def __init__(self, in_dims, out_dims, edge_dims,
                  n_layers=3, module_list=None, aggr="mean", 
                  activations=(F.silu, torch.sigmoid), vector_gate=True):
@@ -209,7 +159,7 @@ class GVPConv(MessagePassing):
                 module_list.append(
                     GVP_((2*self.si + self.se, 2*self.vi + self.ve), out_dims)
                 )
-                for i in range(n_layers - 2):
+                for _ in range(n_layers - 2):
                     module_list.append(GVP_(out_dims, out_dims))
                 module_list.append(GVP_(out_dims, out_dims,
                                        activations=(None, None)))
@@ -229,82 +179,8 @@ class GVPConv(MessagePassing):
         message = self.message_func(message)
         return _merge(*message)
 #########################################################################
-class GVPAttentionConvLayer(nn.Module):
-    """
-    GVP attention layer with residual updates and feedforward network.
-
-    Args:
-        node_dims: Node dimensions (n_scalar, n_vector).
-        edge_dims: Edge dimensions (n_scalar, n_vector).
-        heads: Number of attention heads.
-        n_feedforward: Number of GVPs in feedforward network.
-        drop_rate: Dropout probability.
-        activations: Tuple (scalar_act, vector_act).
-        vector_gate: Whether to use vector gating.
-        residual: Whether to use residual connections.
-        norm_first: Whether to apply layer norm before conv and ff.
-    """
-    def __init__(
-            self, 
-            node_dims, 
-            edge_dims,
-            heads=4, 
-            n_feedforward=2, 
-            drop_rate=.1,
-            activations=(F.silu, torch.sigmoid), 
-            vector_gate=True,
-            residual=True,
-            norm_first=False,
-        ):
-        super(GVPAttentionConvLayer, self).__init__()
-        
-        # Use GVPAttentionConv as the convolution module
-        self.conv = GVPAttentionConv(
-            node_dims, node_dims, edge_dims,
-            heads=heads, 
-            activations=activations, 
-            vector_gate=vector_gate
-        )
-        
-        GVP_ = functools.partial(GVP, 
-                activations=activations, vector_gate=vector_gate)
-        self.norm = nn.ModuleList([LayerNorm(node_dims) for _ in range(2)])
-        self.dropout = nn.ModuleList([Dropout(drop_rate) for _ in range(2)])
-
-        # Feedforward network
-        ff_func = []
-        if n_feedforward == 1:
-            ff_func.append(GVP_(node_dims, node_dims))
-        else:
-            hid_dims = 4*node_dims[0], 2*node_dims[1]
-            ff_func.append(GVP_(node_dims, hid_dims))
-            for _ in range(n_feedforward-2):
-                ff_func.append(GVP_(hid_dims, hid_dims))
-            ff_func.append(GVP_(hid_dims, node_dims, activations=(None, None)))
-        self.ff_func = nn.Sequential(*ff_func)
-        self.residual = residual
-        self.norm_first = norm_first
-
-    def forward(self, x, edge_index, edge_attr):
-        if self.norm_first:
-            dh = self.conv(self.norm[0](x), edge_index, edge_attr)
-            x = tuple_sum(x, self.dropout[0](dh))
-            dh = self.ff_func(self.norm[1](x))
-            x = tuple_sum(x, self.dropout[1](dh))
-        else:
-            dh = self.conv(x, edge_index, edge_attr)
-            x = self.norm[0](tuple_sum(x, self.dropout[0](dh))) if self.residual else dh
-            dh = self.ff_func(x)
-            x = self.norm[1](tuple_sum(x, self.dropout[1](dh))) if self.residual else dh
-        return x
-#########################################################################
 class GVPAttentionConv(MessagePassing):
-    """
-    GVP-based multi-head attention with edge bias.
-
-    Q, K, V projections and attention scoring are SE(3)-equivariant.
-    Edge features bias K and V for geometry-aware local attention.
-    """
+    """GVP multi-head attention with edge bias."""
     def __init__(self, in_dims, out_dims, edge_dims,
                  heads=4,
                  activations=(F.silu, torch.sigmoid), 
@@ -395,7 +271,7 @@ class GVPAttentionConv(MessagePassing):
 
     def message(self, q_i, k_j, v_j, e_k, e_v, n_conf: int,
                 index: torch.Tensor, ptr: Optional[torch.Tensor],
-                size_i: Optional[int]) -> torch.Tensor:
+                size_i: Optional[int] = None) -> torch.Tensor:  # noqa: ARG002
         # Un-flatten and reshape to heads
         def unflatten_heads(t_flat, n_conf):
             s_dim_flat = n_conf * self.so
@@ -435,138 +311,9 @@ class GVPAttentionConv(MessagePassing):
 
         return torch.cat([msg_s_flat, msg_v_flat], dim=-1)
 
-########################################################################
-class gRNAdeLayer(nn.Module):
-    '''
-    GVPConvLayer for handling multiple conformations (encoder-only)
-    '''
-    def __init__(
-            self, 
-            node_dims, 
-            edge_dims,
-            n_message=3, 
-            n_feedforward=2, 
-            drop_rate=.1,
-            activations=(F.silu, torch.sigmoid), 
-            vector_gate=True,
-            residual=True,
-            norm_first=False,
-        ):
-        super(gRNAdeLayer, self).__init__()
-        self.conv = MultigRNAdeConv(node_dims, node_dims, edge_dims, n_message,
-                                 aggr="mean", activations=activations, vector_gate=vector_gate)
-        GVP_ = functools.partial(GVP, 
-                activations=activations, vector_gate=vector_gate)
-        self.norm = nn.ModuleList([LayerNorm(node_dims) for _ in range(2)])
-        self.dropout = nn.ModuleList([Dropout(drop_rate) for _ in range(2)])
 
-        ff_func = []
-        if n_feedforward == 1:
-            ff_func.append(GVP_(node_dims, node_dims))
-        else:
-            hid_dims = 4*node_dims[0], 2*node_dims[1]
-            ff_func.append(GVP_(node_dims, hid_dims))
-            for i in range(n_feedforward-2):
-                ff_func.append(GVP_(hid_dims, hid_dims))
-            ff_func.append(GVP_(hid_dims, node_dims, activations=(None, None)))
-        self.ff_func = nn.Sequential(*ff_func)
-        self.residual = residual
-        self.norm_first = norm_first
-
-    def forward(self, x, edge_index, edge_attr):
-        '''
-        :param x: tuple (s, V) of `torch.Tensor`
-        :param edge_index: array of shape [2, n_edges]
-        :param edge_attr: tuple (s, V) of `torch.Tensor`
-        '''
-        if self.norm_first:
-            dh = self.conv(self.norm[0](x), edge_index, edge_attr)
-            x = tuple_sum(x, self.dropout[0](dh))
-            dh = self.ff_func(self.norm[1](x))
-            x = tuple_sum(x, self.dropout[1](dh))
-        else:
-            dh = self.conv(x, edge_index, edge_attr)
-            x = self.norm[0](tuple_sum(x, self.dropout[0](dh))) if self.residual else dh
-            dh = self.ff_func(x)
-            x = self.norm[1](tuple_sum(x, self.dropout[1](dh))) if self.residual else dh
-        return x
-
-class MultigRNAdeConv(MessagePassing):
-    '''
-    GVPConv for handling multiple conformations
-    '''
-    def __init__(self, in_dims, out_dims, edge_dims,
-                 n_layers=3, module_list=None, aggr="mean", 
-                 activations=(F.silu, torch.sigmoid), vector_gate=True):
-        super(MultigRNAdeConv, self).__init__(aggr=aggr)
-        self.si, self.vi = in_dims
-        self.so, self.vo = out_dims
-        self.se, self.ve = edge_dims
-        
-        GVP_ = functools.partial(GVP, 
-                activations=activations, vector_gate=vector_gate)
-        
-        module_list = module_list or []
-        if not module_list:
-            if n_layers == 1:
-                module_list.append(
-                    GVP_((2*self.si + self.se, 2*self.vi + self.ve), 
-                        (self.so, self.vo)))
-            else:
-                module_list.append(
-                    GVP_((2*self.si + self.se, 2*self.vi + self.ve), out_dims)
-                )
-                for i in range(n_layers - 2):
-                    module_list.append(GVP_(out_dims, out_dims))
-                module_list.append(GVP_(out_dims, out_dims,
-                                       activations=(None, None)))
-        self.message_func = nn.Sequential(*module_list)
-
-    def forward(self, x, edge_index, edge_attr):
-        '''
-        :param x: tuple (s, V) of `torch.Tensor`
-        :param edge_index: array of shape [2, n_edges]
-        :param edge_attr: tuple (s, V) of `torch.Tensor`
-        '''
-        x_s, x_v = x
-        n_conf = x_s.shape[1]
-        
-        # x_s: [n_nodes, n_conf, d] -> [n_nodes, n_conf * d]
-        x_s = x_s.contiguous().view(x_s.shape[0], x_s.shape[1] * x_s.shape[2])        
-        # x_v: [n_nodes, n_conf, d, 3] -> [n_nodes, n_conf * d * 3]
-        x_v = x_v.contiguous().view(x_v.shape[0], x_v.shape[1] * x_v.shape[2] * 3)
-        
-        message = self.propagate(edge_index, s=x_s, v=x_v, edge_attr=edge_attr)
-        
-        return _split_multi(message, self.so, self.vo, n_conf)
-
-    def message(self, s_i, v_i, s_j, v_j, edge_attr):
-        # [n_nodes, n_conf * d] -> [n_nodes, n_conf, d]
-        s_i = s_i.view(s_i.shape[0], s_i.shape[1]//self.si, self.si)
-        s_j = s_j.view(s_j.shape[0], s_j.shape[1]//self.si, self.si)
-        # [n_nodes, n_conf * d * 3] -> [n_nodes, n_conf, d, 3]
-        v_i = v_i.view(v_i.shape[0], v_i.shape[1]//(self.vi * 3), self.vi, 3)
-        v_j = v_j.view(v_j.shape[0], v_j.shape[1]//(self.vi * 3), self.vi, 3)
-
-        message = tuple_cat((s_j, v_j), edge_attr, (s_i, v_i))
-        message = self.message_func(message)
-        return _merge_multi(*message)
-
-########################################################################
 class GatedDynamicProjection(nn.Module):
-    """
-    Geometry-aware linear attention with dynamic projection for O(N) complexity.
-
-    Uses scalar-driven clustering for anchor assignment while preserving
-    vector information in the retrieval phase via dot-product scoring.
-
-    Args:
-        node_dims: Tuple of (scalar_dim, vector_dim).
-        num_anchors: Number of anchor points for compression (r << N).
-        drop_rate: Dropout rate.
-        activations: Tuple of (scalar_activation, vector_activation).
-        vector_gate: Whether to use vector gating in GVP.
-    """
+    """Geometry-aware linear attention with dynamic projection."""
     def __init__(self, node_dims, num_anchors=32, drop_rate=0.1,
                  activations=(F.silu, torch.sigmoid), vector_gate=True, heads=None):
         super(GatedDynamicProjection, self).__init__()
@@ -608,15 +355,7 @@ class GatedDynamicProjection(nn.Module):
         self.d_total = self.scalar_dim + 3 * self.vector_dim if self.vector_dim > 0 else self.scalar_dim
 
     def forward(self, x, batch_index=None, return_attention_map=False):
-        """
-        Args:
-            x: Tuple (s, V) where s: [N, (C,) D_s], V: [N, (C,) D_v, 3].
-            batch_index: Optional [N] batch assignment for batched graphs.
-            return_attention_map: Whether to return implicit attention map.
-
-        Returns:
-            Tuple (out_s, out_v) and optionally attention map.
-        """
+        """Project and aggregate long-range features."""
         x_s, x_v = x
 
         # Average across conformers for long-range branch
@@ -685,7 +424,7 @@ class GatedDynamicProjection(nn.Module):
         return (out_s, out_v)
 
     def _process_single_graph(self, x, return_attention_map=False):
-        """Core linear attention with geometry-aware retrieval."""
+        """Core linear attention."""
         x_s, _ = x
 
         # Step 1: Q, K, V projections
@@ -716,7 +455,7 @@ class GatedDynamicProjection(nn.Module):
         # Step 5: Gating
         gate_s = self.gate_gvp(x)
         gate_s = torch.sigmoid(gate_s + self.gate_bias)
-        gate_v = torch.sigmoid(gate_s.mean(dim=-1, keepdim=True)).unsqueeze(-1)
+        gate_v = gate_s.mean(dim=-1, keepdim=True).unsqueeze(-1)
 
         gated_out_s = linear_out_s * gate_s
         gated_out_v = linear_out_v * gate_v
@@ -734,31 +473,14 @@ class GatedDynamicProjection(nn.Module):
 
 #########################################################################
 class LocalExclusionLoss(nn.Module):
-    """
-    Auxiliary loss that penalizes attention to local neighbors.
-
-    Forces the long-range branch to focus on distant dependencies by
-    penalizing high attention weights within a local window. Uses
-    memory-efficient O(N*w) diagonal band extraction.
-
-    Args:
-        local_window: Size of local exclusion zone.
-    """
+    """Penalize attention to local neighbors."""
     def __init__(self, local_window=10):
         super(LocalExclusionLoss, self).__init__()
         self.local_window = local_window
 
     def forward(self, attention_map, batch_index=None):
-        """
-        Args:
-            attention_map: [N, N] implicit attention matrix.
-            batch_index: Optional [N] batch assignment.
-
-        Returns:
-            Scalar loss value.
-        """
+        """Compute local exclusion loss."""
         n_nodes = attention_map.shape[0]
-        device = attention_map.device
         w = self.local_window
 
         if batch_index is not None:
@@ -771,19 +493,19 @@ class LocalExclusionLoss(nn.Module):
                 indices = torch.where(mask)[0]
                 n_graph = len(indices)
                 attn_submat = attention_map[indices][:, indices]
-                energy, pairs = self._compute_band_energy(attn_submat, n_graph, w, device)
+                energy, pairs = self._compute_band_energy(attn_submat, n_graph, w)
                 total_energy += energy
                 total_pairs += pairs
 
             loss = total_energy / max(total_pairs, 1.0)
         else:
-            energy, pairs = self._compute_band_energy(attention_map, n_nodes, w, device)
+            energy, pairs = self._compute_band_energy(attention_map, n_nodes, w)
             loss = energy / max(pairs, 1.0)
 
         return loss
 
-    def _compute_band_energy(self, attn_matrix, n, w, device):
-        """Sum attention weights in diagonal band (offsets 1 to w)."""
+    def _compute_band_energy(self, attn_matrix, n, w):
+        """Sum attention weights in diagonal band."""
         total_energy = 0.0
         total_pairs = 0
 
@@ -799,17 +521,7 @@ class LocalExclusionLoss(nn.Module):
 
 #########################################################################
 class LengthAwareGating(nn.Module):
-    """
-    Length-aware gating for dual-branch fusion.
-
-    Dynamically adjusts long-range branch contribution based on sequence length:
-    short sequences (< threshold) suppress long-range to avoid noise.
-
-    Args:
-        length_threshold: Sequence length threshold.
-        smoothness: Controls transition smoothness.
-        init_alpha: Initial learnable weight (non-zero for gradient flow).
-    """
+    """Length-aware gating for dual-branch fusion."""
     def __init__(self, length_threshold=150, smoothness=50, init_alpha=0.1):
         super(LengthAwareGating, self).__init__()
         self.length_threshold = length_threshold
@@ -817,13 +529,7 @@ class LengthAwareGating(nn.Module):
         self.alpha = nn.Parameter(torch.tensor(init_alpha))
 
     def forward(self, seq_length):
-        """
-        Args:
-            seq_length: Sequence length (int or tensor).
-
-        Returns:
-            Gating factor gamma in [0, 1].
-        """
+        """Return gating factor in [0, 1]."""
         if not isinstance(seq_length, torch.Tensor):
             seq_length = torch.tensor(seq_length, dtype=torch.float32,
                                      device=self.alpha.device)
@@ -831,17 +537,7 @@ class LengthAwareGating(nn.Module):
         return gamma
 
     def fuse(self, short_features, long_features, seq_length):
-        """
-        Fuse short-range and long-range features.
-
-        Args:
-            short_features: Output from short-range branch.
-            long_features: Output from long-range branch.
-            seq_length: Sequence length (int, float, or per-node tensor).
-
-        Returns:
-            Fused features: short + alpha * gamma * long.
-        """
+        """Fuse short- and long-range features."""
         gamma = self.forward(seq_length)
 
         # Expand gamma to match feature tensor shape
@@ -859,26 +555,7 @@ class LengthAwareGating(nn.Module):
 
 #########################################################################
 class GVPDualBranchConvLayer(nn.Module):
-    """
-    Dual-branch convolution layer with short-range and long-range branches.
-
-    Combines local geometric precision (GVP attention) with global context
-    (geometry-aware dynamic projection) via length-aware gating.
-
-    Args:
-        node_dims: Node embedding dimensions (n_scalar, n_vector).
-        edge_dims: Edge embedding dimensions (n_scalar, n_vector).
-        heads: Number of attention heads for short-range branch.
-        num_anchors: Number of anchors for long-range projection.
-        n_feedforward: Number of GVPs in feedforward network.
-        drop_rate: Dropout rate.
-        local_window: Size of local exclusion zone for auxiliary loss.
-        length_threshold: Sequence length threshold for gating.
-        activations: Tuple of (scalar_activation, vector_activation).
-        vector_gate: Whether to use vector gating in GVP.
-        residual: Whether to use residual connections.
-        norm_first: Whether to apply layer norm before conv and ff.
-    """
+    """Dual-branch layer: short GVP attention + long projection."""
     def __init__(
             self,
             node_dims,
@@ -961,17 +638,7 @@ class GVPDualBranchConvLayer(nn.Module):
         self.cached_attention_map = None
 
     def forward(self, x, edge_index, edge_attr, return_aux_loss=False, batch_index=None):
-        """
-        Args:
-            x: Tuple (s, V) where s: [N, C, D_s], V: [N, C, D_v, 3].
-            edge_index: [2, E] edge indices.
-            edge_attr: Tuple (s, V) edge features.
-            return_aux_loss: Whether to compute local exclusion loss.
-            batch_index: Optional [N] batch assignment.
-
-        Returns:
-            Updated node features (s, V) and optionally auxiliary loss.
-        """
+        """Apply short/long branches and optional aux loss."""
         x_s, x_v = x
         n_nodes = x_s.shape[0]
 
@@ -1036,16 +703,7 @@ class GVPDualBranchConvLayer(nn.Module):
 #########################################################################
 
 class GVP(nn.Module):
-    """
-    Geometric Vector Perceptron for SE(3)-equivariant transformations.
-
-    Args:
-        in_dims: Tuple (n_scalar, n_vector) input dimensions.
-        out_dims: Tuple (n_scalar, n_vector) output dimensions.
-        h_dim: Intermediate vector channels (optional).
-        activations: Tuple (scalar_act, vector_act).
-        vector_gate: Whether to use vector gating.
-    """
+    """Geometric Vector Perceptron."""
     def __init__(self, in_dims, out_dims, h_dim=None,
                  activations=(F.silu, torch.sigmoid), vector_gate=True):
         super(GVP, self).__init__()
@@ -1066,7 +724,7 @@ class GVP(nn.Module):
         self.dummy_param = nn.Parameter(torch.empty(0))
         
     def forward(self, x):
-        """Forward pass. Input/output: tuple (s, V) or scalar tensor."""
+        """Apply GVP transformation."""
         if self.vi:
             s, v = x
             v = torch.transpose(v, -1, -2)
@@ -1098,7 +756,7 @@ class GVP(nn.Module):
 #########################################################################
 
 class _VDropout(nn.Module):
-    """Vector channel dropout (elements of each channel dropped together)."""
+    """Vector channel dropout."""
     def __init__(self, drop_rate):
         super(_VDropout, self).__init__()
         self.drop_rate = drop_rate
@@ -1115,7 +773,7 @@ class _VDropout(nn.Module):
         return x
 
 class Dropout(nn.Module):
-    """Combined dropout for tuples (s, V)."""
+    """Dropout for tuples (s, V)."""
     def __init__(self, drop_rate):
         super(Dropout, self).__init__()
         self.sdropout = nn.Dropout(drop_rate)
@@ -1128,7 +786,7 @@ class Dropout(nn.Module):
         return self.sdropout(s), self.vdropout(v)
 
 class LayerNorm(nn.Module):
-    """Combined LayerNorm for tuples (s, V)."""
+    """LayerNorm for tuples (s, V)."""
     def __init__(self, dims):
         super(LayerNorm, self).__init__()
         self.s, self.v = dims
@@ -1153,16 +811,11 @@ def tuple_cat(*args, dim=-1):
     return torch.cat(s_args, dim=dim), torch.cat(v_args, dim=dim)
 
 def tuple_index(x, idx):
-    """Index into tuple (s, V) along first dimension."""
+    """Index into tuple (s, V)."""
     return x[0][idx], x[1][idx]
 
-def randn(n, dims, device="cpu"):
-    """Random tuples (s, V) from normal distribution."""
-    return torch.randn(n, dims[0], device=device), \
-            torch.randn(n, dims[1], 3, device=device)
-
 def _norm_no_nan(x, axis=-1, keepdims=False, eps=1e-8, sqrt=True):
-    """L2 norm clamped above eps. If sqrt=False, returns squared norm."""
+    """L2 norm clamped above eps."""
     out = torch.clamp(torch.sum(torch.square(x), axis, keepdims), min=eps)
     return torch.sqrt(out) if sqrt else out
 
@@ -1176,21 +829,3 @@ def _merge(s, v):
     """Merge tuple (s, V) into single tensor."""
     v = v.contiguous().view(v.shape[0], v.shape[1] * 3)
     return torch.cat([s, v], -1)
-
-def _merge_multi(s, v):
-    '''
-    _merge for multiple conformers
-    '''
-    # s: [n_nodes, n_conf, d] -> [n_nodes, n_conf * d]
-    s = s.contiguous().view(s.shape[0], s.shape[1] * s.shape[2])
-    # v: [n_nodes, n_conf, d, 3] -> [n_nodes, n_conf * d * 3]
-    v = v.contiguous().view(v.shape[0], v.shape[1] * v.shape[2] * 3)
-    return torch.cat([s, v], -1)
-
-def _split_multi(x, ns, nv, n_conf=5):
-    '''
-    _split for multiple conformers
-    '''
-    s = x[..., :-3 * nv * n_conf].contiguous().view(x.shape[0], n_conf, ns)
-    v = x[..., -3 * nv * n_conf:].contiguous().view(x.shape[0], n_conf, nv, 3)
-    return s, v

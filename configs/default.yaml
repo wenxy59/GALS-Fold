@@ -1,4 +1,4 @@
-# Default training configuration
+# GALS training configuration
 
 # Checkpoint settings (leave empty to auto-generate as {model}_{split})
 checkpoint_prefix:
@@ -37,7 +37,7 @@ max_num_conformers:
   value: 1
   desc: Max conformations per sequence
 noise_scale:
-  value: 0.1
+  value: 0.05
   desc: Coordinate noise std during training
 max_nodes_batch:
   value: 3000
@@ -54,7 +54,7 @@ split:
 # Model architecture
 model:
   value: 'GALS'
-  desc: Model type (GALS/GVPAtten/gRNAde)
+  desc: Model type (GALS/GVPAtten/gRNAde/v12/v13)
 node_in_dim:
   value: [15, 4]
   desc: Input node dimensions (scalar, vector)
@@ -74,7 +74,7 @@ heads:
   value: 4
   desc: Number of attention heads
 drop_rate:
-  value: 0.5
+  value: 0.3
   desc: Dropout rate
 out_dim:
   value: 4
@@ -91,21 +91,21 @@ aux_loss_weight:
   value: 0.3
   desc: Auxiliary loss weight
 num_anchors:
-  value: 32
+  value: 64
   desc: Number of dynamic projection anchors
 
 # Training
 epochs:
-  value: 200
+  value: 80
   desc: Training epochs
 lr:
-  value: 0.0001
+  value: 0.0003
   desc: Learning rate
 weight_decay:
   value: 0
   desc: L2 regularization weight
 label_smoothing:
-  value: 0.05
+  value: 0.02
   desc: Label smoothing
 batch_size:
   value: 8
@@ -114,7 +114,7 @@ num_workers:
   value: 8
   desc: Dataloader workers
 val_every:
-  value: 3
+  value: 2
   desc: Validation interval (epochs)
 patience:
   value: 10

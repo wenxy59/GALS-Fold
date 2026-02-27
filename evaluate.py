@@ -1,20 +1,7 @@
 """
-Unified evaluation script for GALS-Fold models.
+Evaluation script for GALS-Fold.
 
 Loads test data directly from processed.pt (consistent with training).
-
-Usage:
-    python evaluate.py --config configs/evaluate.yaml
-
-    # Test GALS model on kfold_1:
-    python evaluate.py --config configs/evaluate.yaml model=GALS split=kfold_1
-
-    # Test GVPAtten model on kfold_2:
-    python evaluate.py --config configs/evaluate.yaml model=GVPAtten split=kfold_2
-
-    # Override auto-generated paths if needed:
-    python evaluate.py --config configs/evaluate.yaml model=GALS split=kfold_1 \
-        model_path=./custom/path/to/model.h5
 """
 
 import dotenv
@@ -26,7 +13,6 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 import os
-import sys
 import yaml
 import random
 import argparse
@@ -35,7 +21,6 @@ from pathlib import Path
 from types import SimpleNamespace
 import torch
 import torch.nn.functional as F
-import torch_geometric
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -43,7 +28,7 @@ from Bio.SeqRecord import SeqRecord
 from src.data.featurizer import RNAGraphFeaturizer
 from src.data.data_utils import get_backbone_coords
 from src.evaluator import edit_distance, self_consistency_score_eternafold
-from src.models import GeometricLongShortRNA, GVPAttentionShortBranch, gRNAde
+from src.models import GeometricLongShortRNA
 from src.constants import NUM_TO_LETTER, RNA_ATOMS, FILL_VALUE, DATA_PATH
 
 
@@ -68,14 +53,17 @@ def load_config(config_path, overrides=None):
     # Auto-generate paths based on model and split if not specified
     model = config.get('model', 'GALS')
     split = config.get('split', 'kfold_1')
+    seed = config.get('seed', 42)
 
-    # Auto-generate output_dir: ./statistics/testfasta/{model}_{split}
+    split_tag = split
+
+    # Auto-generate output_dir: ./statistics/testfasta/{model}_{split_tag}
     if not config.get('output_dir'):
-        config['output_dir'] = f'./statistics/testfasta/{model}_{split}'
+        config['output_dir'] = f'./statistics/testfasta/{model}_{split_tag}'
 
-    # Auto-generate model_path: ./checkpoint/{model}_{split}_best_checkpoint.h5
+    # Auto-generate model_path: ./checkpoint/{model}_{split_tag}_best_checkpoint.h5
     if not config.get('model_path'):
-        config['model_path'] = f'./checkpoint/{model}_{split}_best_checkpoint.h5'
+        config['model_path'] = f'./checkpoint/{model}_{split_tag}_best_checkpoint.h5'
 
     # Auto-generate test_index_file: ./statistics/{split}_test_index.txt
     if not config.get('test_index_file'):
@@ -96,13 +84,8 @@ def set_seed(seed=42):
 
 
 def get_model(config):
-    """Initialize model based on config."""
-    model_class = {
-        'GALS': GeometricLongShortRNA,
-        'GVPAtten': GVPAttentionShortBranch,
-        'gRNAde': gRNAde,
-    }[config.model]
-    
+    """Initialize model."""
+    model_class = GeometricLongShortRNA
     model_kwargs = {
         'node_in_dim': tuple(config.node_in_dim),
         'node_h_dim': tuple(config.node_h_dim),
@@ -112,15 +95,13 @@ def get_model(config):
         'drop_rate': config.drop_rate,
         'out_dim': config.out_dim,
     }
-    
-    # GALS-specific parameters
-    if config.model == 'GALS':
-        model_kwargs['heads'] = getattr(config, 'heads', 4)
-        model_kwargs['num_anchors'] = getattr(config, 'num_anchors', 32)
-        model_kwargs['local_window'] = getattr(config, 'local_window', 10)
-        model_kwargs['length_threshold'] = getattr(config, 'length_threshold', 150)
-        model_kwargs['aux_loss_weight'] = getattr(config, 'aux_loss_weight', 0.3)
-    
+
+    model_kwargs['heads'] = getattr(config, 'heads', 4)
+    model_kwargs['num_anchors'] = getattr(config, 'num_anchors', 32)
+    model_kwargs['local_window'] = getattr(config, 'local_window', 10)
+    model_kwargs['length_threshold'] = getattr(config, 'length_threshold', 150)
+    model_kwargs['aux_loss_weight'] = getattr(config, 'aux_loss_weight', 0.3)
+
     return model_class(**model_kwargs)
 
 
@@ -333,8 +314,17 @@ def main(config, device):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="GALS-Fold Evaluation")
-    parser.add_argument('--config', default='configs/evaluate.yaml', help='Path to config file')
+    parser = argparse.ArgumentParser(
+        description='GALS-Fold Evaluation with SC Score',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    python evaluate.py --config configs/evaluate.yaml
+    python evaluate.py --config configs/evaluate.yaml split=kfold_2
+    python evaluate.py --config configs/evaluate.yaml model_path=./my_model.pth n_samples=32
+        """)
+    parser.add_argument('--config', default='configs/evaluate.yaml',
+                        help='Path to YAML config file')
     args, unknown = parser.parse_known_args()
 
     # Parse key=value overrides

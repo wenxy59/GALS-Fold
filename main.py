@@ -9,20 +9,16 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 import os
 import random
 import argparse
+import ast
 import wandb
 import numpy as np
 
 import torch
-import torch_geometric
 from torch_geometric.loader import DataLoader
 
-from src.trainer import train, evaluate
+from src.trainer import train
 from src.data.dataset import RNADesignDataset, BatchSampler
-from src.models import (
-    GeometricLongShortRNA,
-    GVPAttentionShortBranch,
-    gRNAde,
-)
+from src.models import GeometricLongShortRNA
 from src.constants import DATA_PATH
 
 
@@ -54,12 +50,83 @@ def main(config, device):
     testset = get_dataset(config, test_list, split="test")
 
     # Prepare dataloaders
-    train_loader = get_dataloader(config, trainset, shuffle=True)
+    length_bins = getattr(config, 'length_bins', None)
+    length_weights = getattr(config, 'length_weights', None)
+    if not length_bins or not length_weights:
+        length_bins = None
+        length_weights = None
+
+    train_loader = get_dataloader(
+        config, trainset, shuffle=True,
+        length_bins=length_bins, length_weights=length_weights
+    )
     val_loader = get_dataloader(config, valset, shuffle=False)
     test_loader = get_dataloader(config, testset, shuffle=False)
         
     # Run trainer
     train(config, model, train_loader, val_loader, test_loader, device)
+
+    # Post-training recovery evaluation by length bins (0-100/100-200/>200)
+    post_eval = getattr(config, "post_eval_recovery", False)
+    if post_eval:
+        try:
+            if hasattr(model, "sample"):
+                _evaluate_recovery_bins(config, model, testset, device)
+            else:
+                print("Post-eval skipped: model has no sample() method.")
+        except Exception as exc:
+            print(f"Post-eval recovery bins failed: {exc}")
+    else:
+        print("Post-eval recovery bins skipped (post_eval_recovery=False).")
+
+
+def _evaluate_recovery_bins(config, model, dataset, device):
+    model.eval()
+    n_samples = int(getattr(config, "n_samples", 16))
+    temperature = float(getattr(config, "temperature", 0.1))
+
+    save_dir = getattr(config, "save_dir", "./trainedmodels")
+    ckpt_prefix = getattr(config, "checkpoint_prefix", "")
+    ckpt_prefix = f"{ckpt_prefix}_" if ckpt_prefix else ""
+    best_ckpt = os.path.join(save_dir, f"{ckpt_prefix}best_checkpoint.h5")
+
+    if os.path.exists(best_ckpt):
+        model.load_state_dict(torch.load(best_ckpt, map_location=device, weights_only=False))
+
+    bins = {
+        "0-100": [],
+        "100-200": [],
+        ">200": [],
+    }
+
+    with torch.no_grad():
+        for raw_data in dataset.data_list:
+            data = dataset.featurizer(raw_data).to(device)
+            samples = model.sample(data, n_samples, temperature, return_logits=False)
+            if isinstance(samples, tuple):
+                samples = samples[0]
+            if samples.dim() == 1:
+                samples = samples.unsqueeze(0)
+
+            rec = samples.eq(data.seq.unsqueeze(0)).float().mean().item()
+            seq_len = int(data.seq.numel())
+            if seq_len <= 100:
+                bins["0-100"].append(rec)
+            elif seq_len <= 200:
+                bins["100-200"].append(rec)
+            else:
+                bins[">200"].append(rec)
+
+    def summarize(values):
+        if not values:
+            return float("nan"), float("nan"), 0
+        arr = np.array(values)
+        return float(arr.mean()), float(arr.std()), len(values)
+
+    print("\nPost-eval Recovery by Length (mean +/- std):")
+    for key in ["0-100", "100-200", ">200"]:
+        mean, std, count = summarize(bins[key])
+        print(f"  {key}: {mean:.4f} +/- {std:.4f} (n={count})")
 
 
 def get_data_splits(config, split_type="kfold_1"):
@@ -103,6 +170,8 @@ def get_dataloader(
         shuffle=True,
         pin_memory=True,
         exclude_keys=[],
+        length_bins=None,
+        length_weights=None,
     ):
     """
     Returns a DataLoader for a given Dataset.
@@ -122,6 +191,8 @@ def get_dataloader(
             max_nodes_batch = config.max_nodes_batch,
             max_nodes_sample = config.max_nodes_sample,
             shuffle = shuffle,
+            length_bins = length_bins,
+            length_weights = length_weights,
         ),
         pin_memory = pin_memory,
         exclude_keys = exclude_keys
@@ -132,11 +203,7 @@ def get_model(config):
     """
     Returns a Model for a given config.
     """
-    model_class = {
-        'GALS' : GeometricLongShortRNA,
-        'GVPAtten': GVPAttentionShortBranch,
-        'gRNAde': gRNAde,
-    }[config.model]
+    model_class = GeometricLongShortRNA
 
     # Base parameters
     model_kwargs = {
@@ -149,12 +216,11 @@ def get_model(config):
         'out_dim': config.out_dim,
     }
 
-    if config.model == 'GALS':
-        model_kwargs['heads'] = getattr(config, 'heads', 4)
-        model_kwargs['num_anchors'] = getattr(config, 'num_anchors', 32)
-        model_kwargs['local_window'] = getattr(config, 'local_window', 10)
-        model_kwargs['length_threshold'] = getattr(config, 'length_threshold', 150)
-        model_kwargs['aux_loss_weight'] = getattr(config, 'aux_loss_weight', 0.01)
+    model_kwargs['heads'] = getattr(config, 'heads', 4)
+    model_kwargs['num_anchors'] = getattr(config, 'num_anchors', 32)
+    model_kwargs['local_window'] = getattr(config, 'local_window', 10)
+    model_kwargs['length_threshold'] = getattr(config, 'length_threshold', 150)
+    model_kwargs['aux_loss_weight'] = getattr(config, 'aux_loss_weight', 0.01)
 
     return model_class(**model_kwargs)
 
@@ -179,11 +245,23 @@ def set_seed(seed=0, device_type='cpu'):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', dest='config', default='configs/default.yaml', type=str)
-    parser.add_argument('--expt_name', dest='expt_name', default=None, type=str)
-    parser.add_argument('--tags', nargs='+', dest='tags', default=[])
-    parser.add_argument('--no_wandb', action="store_true")
+    parser = argparse.ArgumentParser(
+        description='GALS: Graph-based Autoregressive Language model for RNA Inverse Folding',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    python main.py --config configs/default.yaml
+    python main.py --config configs/default.yaml split=kfold_2 epochs=50
+    python main.py --config configs/default.yaml --expt_name my_experiment
+        """)
+    parser.add_argument('--config', dest='config', default='configs/default.yaml', type=str,
+                        help='Path to YAML config file')
+    parser.add_argument('--expt_name', dest='expt_name', default=None, type=str,
+                        help='Experiment name for logging')
+    parser.add_argument('--tags', nargs='+', dest='tags', default=[],
+                        help='Tags for wandb logging')
+    parser.add_argument('--wandb', action="store_true",
+                        help='Enable wandb logging (disabled by default)')
     args, unknown = parser.parse_known_args()
 
     # Parse key=value args for config override
@@ -191,39 +269,72 @@ if __name__ == "__main__":
     for arg in unknown:
         if '=' in arg:
             k, v = arg.split('=', 1)
-            try:
-                v = int(v)
-            except ValueError:
+            # Parse list/tuple/dict literals passed from sweeps (e.g., "[15, 4]")
+            if v.startswith('[') or v.startswith('(') or v.startswith('{'):
                 try:
-                    v = float(v)
-                except ValueError:
+                    v = ast.literal_eval(v)
+                except (ValueError, SyntaxError):
                     pass
+            else:
+                try:
+                    v = int(v)
+                except ValueError:
+                    try:
+                        v = float(v)
+                    except ValueError:
+                        pass
             config_overrides[k] = v
 
-    # Initialise wandb
-    if args.no_wandb:
+    # Initialise wandb (disabled by default)
+    if args.wandb:
         wandb.init(
-            project=os.environ.get("WANDB_PROJECT"), 
-            entity=os.environ.get("WANDB_ENTITY"), 
-            config=args.config, 
-            name=args.expt_name, 
-            mode='disabled'
-        )
-    else:
-        wandb.init(
-            project=os.environ.get("WANDB_PROJECT"), 
-            entity=os.environ.get("WANDB_ENTITY"), 
-            config=args.config, 
-            name=args.expt_name, 
+            project=os.environ.get("WANDB_PROJECT"),
+            entity=os.environ.get("WANDB_ENTITY"),
+            config=args.config,
+            name=args.expt_name,
             tags=args.tags,
             mode='online'
+        )
+        # 设置 epoch 为默认 x 轴
+        wandb.define_metric("epoch")
+        wandb.define_metric("*", step_metric="epoch")
+    else:
+        wandb.init(
+            project=os.environ.get("WANDB_PROJECT"),
+            entity=os.environ.get("WANDB_ENTITY"),
+            config=args.config,
+            name=args.expt_name,
+            mode='disabled'
         )
     config = wandb.config
     config.update(config_overrides, allow_val_change=True)
 
-    # Auto-generate checkpoint_prefix if not specified: {model}_{split}
+    # Log all hyperparameters explicitly to wandb for sweep visibility
+    wandb.config.update({
+        "lr": config.lr,
+        "batch_size": config.batch_size,
+        "drop_rate": config.drop_rate,
+        "num_anchors": config.num_anchors,
+        "length_threshold": config.length_threshold,
+        "label_smoothing": config.label_smoothing,
+        "noise_scale": config.noise_scale,
+        "weight_decay": config.weight_decay,
+        "aux_loss_weight": config.aux_loss_weight,
+        "epochs": config.epochs,
+        "patience": config.patience,
+        "model": config.model,
+        "split": config.split,
+    }, allow_val_change=True)
+
+    # Auto-generate checkpoint_prefix if not specified
     if not config.get('checkpoint_prefix'):
-        auto_prefix = f"{config.model}_{config.split}"
+        if args.wandb and wandb.run.id:
+            # 启用 wandb 时，使用 run.id 作为前缀（避免 sweep 多次运行覆盖）
+            auto_prefix = f"{config.model}_{config.split}_{wandb.run.id}"
+        elif config.split == "structsim":
+            auto_prefix = f"{config.model}_{config.split}_{config.seed}"
+        else:
+            auto_prefix = f"{config.model}_{config.split}"
         config.update({'checkpoint_prefix': auto_prefix}, allow_val_change=True)
 
     config_str = "\nCONFIG"

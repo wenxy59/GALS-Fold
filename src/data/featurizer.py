@@ -143,7 +143,7 @@ class RNAGraphFeaturizer(object):
                 torch.nan_to_num,
                 (node_s, node_v, edge_s, edge_v)
             )
-            
+
         data = torch_geometric.data.Data(
             seq = seq,                  # num_res x 1
             node_s = node_s,            # num_res x num_conf x (num_bb_atoms x 5)
@@ -152,7 +152,7 @@ class RNAGraphFeaturizer(object):
             edge_v = edge_v,            # num_edges x num_conf x num_bb_atoms x 3
             edge_index = edge_index,    # 2 x num_edges
             mask_confs = mask_confs,    # num_res x num_conf
-            mask_coords = mask_coords,  # num_res
+            mask_coords = mask_coords   # num_res
         )
         return data
     

@@ -2,6 +2,8 @@ import os
 import copy
 import shutil
 from datetime import datetime
+from multiprocessing import Pool
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -26,12 +28,16 @@ from src.data.sec_struct_utils import (
     dotbracket_to_adjacency
 )
 from src.constants import (
-    NUM_TO_LETTER, 
+    NUM_TO_LETTER,
     PROJECT_PATH,
     RMSD_THRESHOLD,
     TM_THRESHOLD,
     GDT_THRESHOLD
 )
+
+
+# Default number of parallel workers for secondary structure prediction
+DEFAULT_NUM_WORKERS = min(32, os.cpu_count() or 1)
 
 
 def evaluate(
@@ -313,19 +319,39 @@ def evaluate(
     return out
 
 
+def _predict_sec_struct_worker(args):
+    """
+    Worker function for parallel secondary structure prediction.
+
+    Args:
+        args: tuple of (sequence_string, n_samples_ss)
+
+    Returns:
+        List of predicted secondary structures in dot-bracket notation.
+    """
+    pred_seq, n_samples_ss = args
+    try:
+        return predict_sec_struct(pred_seq, n_samples=n_samples_ss)
+    except Exception as e:
+        # Return empty structure on failure to avoid crashing the pool
+        print(f"Warning: Secondary structure prediction failed for sequence: {e}")
+        return ['.'] * len(pred_seq)
+
+
 def self_consistency_score_eternafold(
-        samples, 
-        true_sec_struct_list, 
+        samples,
+        true_sec_struct_list,
         mask_coords,
         n_samples_ss = 1,
         num_to_letter = NUM_TO_LETTER,
-        return_sec_structs = False
+        return_sec_structs = False,
+        n_workers = None
     ):
     """
     Compute self consistency score for an RNA, given its true secondary structure(s)
-    and a list of designed sequences. 
+    and a list of designed sequences.
     EternaFold is used to 'forward fold' the designs.
-    
+
     Args:
         samples: designed sequences of shape (n_samples, seq_len)
         true_sec_struct_list: list of true secondary structures (n_true_ss, seq_len)
@@ -333,22 +359,26 @@ def self_consistency_score_eternafold(
         n_samples_ss: number of predicted secondary structures per designed sample
         num_to_letter: lookup table mapping integers to nucleotides
         return_sec_structs: whether to return the predicted secondary structures
-    
+        n_workers: number of parallel workers for secondary structure prediction.
+                   If None, uses DEFAULT_NUM_WORKERS. Set to 1 for serial execution.
+
     Workflow:
-        
+
         Input: For a given RNA molecule, we are given:
         - Designed sequences of shape (n_samples, seq_len)
         - True secondary structure(s) of shape (n_true_ss, seq_len)
-        
+
         For each designed sequence:
-        - Predict n_sample_ss secondary structures using EternaFold
+        - Predict n_sample_ss secondary structures using EternaFold (in parallel)
         - For each pair of true and predicted secondary structures:
             - Compute MCC score between their adjacency matrix representations
         - Take the average MCC score across all n_sample_ss predicted structures
-        
+
         Take the average MCC score across all n_samples designed sequences
     """
-    
+    if n_workers is None:
+        n_workers = DEFAULT_NUM_WORKERS
+
     n_true_ss = len(true_sec_struct_list)
     sequence_length = mask_coords.sum()
     # map all entries from dotbracket to numerical representation
@@ -360,13 +390,24 @@ def self_consistency_score_eternafold(
         true_sec_struct_list
     ).unsqueeze(1).repeat(1, n_samples_ss, 1, 1).reshape(-1, sequence_length, sequence_length)
 
+    # Convert all samples to sequence strings
+    sequences = [''.join([num_to_letter[num] for num in _sample]) for _sample in samples]
+
+    # Prepare arguments for parallel processing
+    worker_args = [(seq, n_samples_ss) for seq in sequences]
+
+    # Parallel prediction of secondary structures
+    if n_workers > 1 and len(samples) > 1:
+        with Pool(n_workers) as pool:
+            all_pred_sec_structs = pool.map(_predict_sec_struct_worker, worker_args)
+    else:
+        # Serial execution for single sample or when n_workers=1
+        all_pred_sec_structs = [_predict_sec_struct_worker(args) for args in worker_args]
+
+    # Compute MCC scores for each sample
     mcc_scores = []
     pred_sec_structs = []
-    for _sample in samples:
-        # convert sample to string
-        pred_seq = ''.join([num_to_letter[num] for num in _sample])
-        # predict secondary structure(s) for each sample
-        pred_sec_struct_list = predict_sec_struct(pred_seq, n_samples=n_samples_ss)
+    for pred_sec_struct_list in all_pred_sec_structs:
         if return_sec_structs:
             pred_sec_structs.append(copy.copy(pred_sec_struct_list))
         # map all entries from dotbracket to numerical representation

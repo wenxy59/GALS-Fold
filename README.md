@@ -13,7 +13,7 @@
 
 ## Overview
 
-**GALS-Fold** is a novel deep learning framework for RNA inverse folding—the task of designing RNA sequences that fold into a given 3D backbone structure. Unlike existing methods that suffer from either quadratic complexity (limiting scalability to long sequences) or loss of geometric precision (compromising design quality), GALS-Fold achieves **O(N) linear complexity** while preserving **SE(3)-equivariant geometric reasoning**.
+**GALS-Fold** is a geometry-aware long-short framework for RNA inverse folding: designing nucleotide sequences that adopt a prescribed 3D backbone. It addresses the “long RNA dilemma”: local geometric GNNs capture short-range motifs but struggle with long-range tertiary constraints, while global attention captures distant couplings but incurs quadratic cost. GALS-Fold combines an SE(3)-equivariant short-range encoder with a linear-time long-range module based on anchor attention, adds a local-exclusion regularization to emphasize non-local signals, and fuses long/short features with length-aware gating for scalability to long RNAs.
 
 <p align="center">
   <img src="./statistics/Framework.png" width="80%" />
@@ -23,10 +23,9 @@
 
 ### Key Contributions
 
-- **Dual-Stream Architecture**: Parallel short-range (local geometric) and long-range (global Interactions) branches that capture complex structural information.
-- **Dynamic Projection Attention**: A novel asymmetric mechanism where clustering is efficient but retrieval preserves 3D directional sensitivity.
-- **Length-Aware Gating and Gated Attention**: Dynamic fusion of local and global features based on sequence length, enabling optimal performance across diverse RNA sizes.
-- **Local-Exclusion Auxiliary Loss**: Training objective that enforces long-range branch to focus on distant dependencies
+- **Nearly O(N) long-short framework** for RNA inverse folding that removes the quadratic bottleneck of global attention while retaining local geometric fidelity.
+- **Dual-stream architecture** with a short SE(3)-equivariant GNN branch and a long branch based on linear anchor attention to capture long-range dependencies.
+- **Local-exclusion regularization and length-aware gating** to keep the long branch focused on non-local signals and adaptively fuse long/short features.
 
 ---
 
@@ -105,7 +104,7 @@ g++ -static -O3 -ffast-math -lm -o qTMclust qTMclust.cpp
 
 ```
 
-Once your python environment is set up, create your `.env` file with the appropriate environment variables; see the .env.example file included in the codebase for reference. 
+Once your python environment is set up, create your `.env` file with the appropriate environment variables; see the `.env_example` file included in the codebase for reference. 
 
 ```sh
 cd ~/GALS-Fold/
@@ -119,10 +118,11 @@ In order to train your own models from scratch though, you still need to downloa
 ### Training
 
 ```bash
-# you can just start training with wandb as follows:
+# you can just start training as follows:
 python main.py --config configs/default.yaml split=kfold_1 model=GALS
-# for training without wandb logging, run in background:
-nohup python -u main.py --config configs/default.yaml split=kfold_1 model=GVPAtten --no_wandb > main.log 2>&1 &
+
+# enable wandb logging:
+python main.py --config configs/default.yaml split=kfold_1 model=GALS --wandb
 ```
 
 ### Evaluation
@@ -131,12 +131,12 @@ nohup python -u main.py --config configs/default.yaml split=kfold_1 model=GVPAtt
 python evaluate.py model=GALS split=kfold_1 gpu=0
 
 # Or you can start multiple processing
-nohup sh -c 'python -u evaluate.py model=GALS split=kfold_5 > evalgals5.log 2>&1 ; python -u evaluate.py model=GVPAtten split=kfold_2 > evalgvpa2.log 2>&1 ; python -u evaluate.py model=GVPAtten split=kfold_3 > evalgvpa3.log 2>&1 ; python -u evaluate.py model=GVPAtten split=kfold_4 > evalgvpa4.log 2>&1 ; python -u evaluate.py model=GVPAtten split=kfold_5 > evalgvpa5.log 2>&1' &
+nohup sh -c 'python -u evaluate.py model=GALS split=kfold_1 > evalgals1.log 2>&1 ; python -u evaluate.py model=GALS split=kfold_2 > evalgals2.log 2>&1 ; python -u evaluate.py model=GALS split=kfold_3 > evalgals3.log 2>&1 ; python -u evaluate.py model=GALS split=kfold_4 > evalgals4.log 2>&1 ; python -u evaluate.py model=GALS split=kfold_5 > evalgals5.log 2>&1' &
 ```
 
 ## Architecture
 
-GALS-Fold employs a **Dual-Stream Parallel Residual** architecture within each encoder layer:
+GALS-Fold uses a geometry-aware long-short dual-stream encoder to capture local geometry and long-range dependencies with near-linear cost:
 
 ```
                    Input: Node Features (Scalar + Vector)
@@ -159,20 +159,16 @@ GALS-Fold employs a **Dual-Stream Parallel Residual** architecture within each e
 
 ### Short-Range Branch
 
-- **GVP-Attention** on k-NN graph (k=32)
-- Captures local features: bond lengths, angles, base stacking .etc
-- Full SE(3)-equivariance preserved
+- SE(3)-equivariant GVP message passing on a k-NN graph to model local geometry and motifs.
 
 ### Long-Range Branch
 
-- **Dynamic Projection Attention**: Projects N nodes → r anchors (r=32) to reduce complexity of attention capturing long interactions
-- **Local-Exclusion Auxiliary Loss**: Training objective that enforces long-range branch to focus on distant dependencies
+- Linear anchor attention via dynamic projection to model global interactions at nearly O(N) cost.
+- Local-exclusion regularization discourages adjacent nucleotides from sharing anchors, keeping the long branch focused on non-local signals.
 
 ### Fusion Mechanism
 
-- **Length-Aware Gating**: γ = σ((L - L₀)/τ) where L₀=150, τ=50
-- Short sequences (L < 150): Primarily local features
-- Long sequences (L > 150): Increased global context integration
+- Length-aware gating adaptively fuses long and short features as sequence length increases.
 
 ---
 
@@ -184,8 +180,21 @@ GALS-Fold employs a **Dual-Stream Parallel Residual** architecture within each e
 | ------------ | ------------------------------------------------------------ |
 | **Recovery** | Sequence identity between designed and native sequences      |
 | **SC-Score** | Self-consistency: fold designed sequence, compare to target structure |
+| **TM-Score** | Tertiary-structure similarity between predicted and target backbones |
+| **F1-Score** | Secondary-structure base-pair F1 between predicted and target structures |
+| **GC-Content** | GC-content similarity between designed and native sequences |
+| **k-mer Dist.** | KLD and R² between k-mer frequency distributions |
+| **MFE** | Minimum free energy distribution alignment (thermodynamic plausibility) |
+| **Complexity** | Inference time and peak memory vs. sequence length |
 
 ---
+
+### Artifacts
+
+- Model checkpoints: `checkpoint/`
+- Statistics tables (txt): `statistics/data/`
+- Test FASTA archives: `statistics/testfasta/`
+- Analysis notebook: `statistics/StatisticalNotebook.ipynb` (processes the statistics and FASTA artifacts)
 
 ### Downloading and Preparing Data
 
@@ -235,7 +244,11 @@ We have provided the splits used in our experiments in the `data/` directory as 
 We use RNA structures from the PDB, processed following k-fold strategy. In the experiments, 5-fold cross-validation with structure-based clustering ensures no data leakage and evaluates generalization performance.
 
 <p align="center">
-  <img src="./statistics/kfold_comparison.png" width="90%" />
+  <img src="./statistics/dataset_statistics.pdf" width="90%" />
+</p>
+
+<p align="center">
+  <img src="./statistics/kfold_statistics.pdf" width="90%" />
 </p>
 
 
@@ -251,12 +264,12 @@ Key hyperparameters in `configs/default.yaml`:
 | ------------------ | --------- | --------------------------------------- |
 | `num_layers`       | 4         | Number of encoder/decoder layers        |
 | `node_h_dim`       | [128, 16] | Hidden dimensions (scalar, vector)      |
-| `num_anchors`      | 32        | Anchor points for long-range projection |
+| `num_anchors`      | 64        | Anchor points for long-range projection |
 | `heads`            | 4         | Attention heads in short-range branch   |
 | `length_threshold` | 150       | Length threshold for gating activation  |
 | `aux_loss_weight`  | 0.3       | Weight for local-exclusion loss         |
-| `drop_rate`        | 0.5       | Dropout rate                            |
-| `lr`               | 1e-4      | Learning rate                           |
+| `drop_rate`        | 0.3       | Dropout rate                            |
+| `lr`               | 3e-4      | Learning rate                           |
 
 ---
 
