@@ -189,6 +189,16 @@ GALS-Fold uses a geometry-aware long-short dual-stream encoder to capture local 
 
 ---
 
+### Case Study
+
+We visualize designed RNAs against native backbones using RhoFold predictions and pyMOL structural alignment. Across lengths, GALS-Fold designs align more closely with native conformations than the baseline, with clearer advantages on medium and long RNAs where long-range constraints dominate.
+
+<p align="center">
+  <img src="./statistics/casestudy.png" width="90%" />
+</p>
+
+---
+
 ### Artifacts
 
 - Model checkpoints: `checkpoint/`
@@ -244,11 +254,11 @@ We have provided the splits used in our experiments in the `data/` directory as 
 We use RNA structures from the PDB, processed following k-fold strategy. In the experiments, 5-fold cross-validation with structure-based clustering ensures no data leakage and evaluates generalization performance.
 
 <p align="center">
-  <img src="./statistics/dataset_statistics.pdf" width="90%" />
+  <img src="./statistics/dataset_statistics.png" width="90%" />
 </p>
 
 <p align="center">
-  <img src="./statistics/kfold_statistics.pdf" width="90%" />
+  <img src="./statistics/kfold_statistics.png" width="90%" />
 </p>
 
 
