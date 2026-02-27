@@ -16,7 +16,7 @@
 **GALS-Fold** is a geometry-aware long-short framework for RNA inverse folding: designing nucleotide sequences that adopt a prescribed 3D backbone. It addresses the “long RNA dilemma”: local geometric GNNs capture short-range motifs but struggle with long-range tertiary constraints, while global attention captures distant couplings but incurs quadratic cost. GALS-Fold combines an SE(3)-equivariant short-range encoder with a linear-time long-range module based on anchor attention, adds a local-exclusion regularization to emphasize non-local signals, and fuses long/short features with length-aware gating for scalability to long RNAs.
 
 <p align="center">
-  <img src="./statistics/Framework.png" width="80%" />
+  <img src="./statistics/Framework.png" width="90%" />
 </p>
 
 
@@ -194,7 +194,7 @@ GALS-Fold uses a geometry-aware long-short dual-stream encoder to capture local 
 We visualize designed RNAs against native backbones using RhoFold predictions and pyMOL structural alignment. Across lengths, GALS-Fold designs align more closely with native conformations than the baseline, with clearer advantages on medium and long RNAs where long-range constraints dominate.
 
 <p align="center">
-  <img src="./statistics/casestudy.png" width="90%" />
+  <img src="./statistics/casestudy.png" width="80%" />
 </p>
 
 ---
@@ -254,11 +254,11 @@ We have provided the splits used in our experiments in the `data/` directory as 
 We use RNA structures from the PDB, processed following k-fold strategy. In the experiments, 5-fold cross-validation with structure-based clustering ensures no data leakage and evaluates generalization performance.
 
 <p align="center">
-  <img src="./statistics/dataset_statistics.png" width="90%" />
+  <img src="./statistics/dataset_statistics.png" width="80%" />
 </p>
 
 <p align="center">
-  <img src="./statistics/kfold_statistics.png" width="90%" />
+  <img src="./statistics/kfold_statistics.png" width="80%" />
 </p>
 
 
