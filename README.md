@@ -40,7 +40,7 @@
 ### Setup
 
 Set up a python environment by following the installation instructions below. 
-We have tested on Linux with Python 3.10.19 and CUDA 12.1 on NVIDIA A800 and 4090/5090 GPUs.
+We have tested on Linux with Python 3.10.19 and CUDA 12.1 on NVIDIA L40S and 4090/5090 GPUs.
 
 ```bash
 # Clone the repository
