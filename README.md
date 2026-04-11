@@ -146,7 +146,7 @@ nohup sh -c 'python -u evaluate.py model=GALS split=kfold_1 > evalgals1.log 2>&1
 We visualize designed RNAs against native backbones using RhoFold predictions and pyMOL structural alignment. Across lengths, GALS-Fold designs align more closely with native conformations than the baseline, with clearer advantages on medium and long RNAs where long-range constraints dominate.
 
 <p align="center">
-  <img src="./statistics/casestudy.png" width="80%" />
+  <img src="./statistics/real.png" width="80%" />
 </p>
 
 ---
