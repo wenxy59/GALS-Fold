@@ -4,7 +4,6 @@
   <a href="#overview">Overview</a> •
   <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#architecture">Architecture</a> •
   <a href="#experiments">Experiments</a>
 </p>
 
@@ -19,14 +18,6 @@
   <img src="./statistics/Framework.png" width="90%" />
 </p>
 
-
-
-### Key Contributions
-
-- **Nearly O(N) long-short framework** for RNA inverse folding that removes the quadratic bottleneck of global attention while retaining local geometric fidelity.
-- **Dual-stream architecture** with a short SE(3)-equivariant GNN branch and a long branch based on linear anchor attention to capture long-range dependencies.
-- **Local-exclusion regularization and length-aware gating** to keep the long branch focused on non-local signals and adaptively fuse long/short features.
-
 ---
 
 ## Installation
@@ -40,7 +31,7 @@
 ### Setup
 
 Set up a python environment by following the installation instructions below. 
-We have tested on Linux with Python 3.10.19 and CUDA 12.1 on NVIDIA L40S and 4090/5090 GPUs.
+The experiments were conducted with Python 3.10.19 and CUDA 12.1 on RTX 4090 GPUs, with consistent results also observed on NVIDIA L40S and RTX 5090 GPUs under compatible CUDA environments.
 
 ```bash
 # Clone the repository
@@ -48,20 +39,12 @@ git clone https://github.com/wenxy59/GALS-Fold.git
 cd GALS-Fold
 
 # Create conda environment (recommended)
-conda create -n galsfold python=3.10
+conda create -n galsfold python=3.10 -y
 conda activate galsfold
 
-# Install PyTorch with CUDA 12.1 support
-pip install torch==2.4.0+cu121 torchvision==0.19.0+cu121 torchaudio==2.4.0+cu121 \
-    --index-url https://download.pytorch.org/whl/cu121
-
-# Install PyTorch Geometric and extensions
-pip install torch-geometric==2.7.0
-pip install torch-scatter torch-cluster torch-sparse torch-spline-conv \
-    -f https://data.pyg.org/whl/torch-2.4.0+cu121.html
-
-# Install remaining dependencies
-pip install -r requirements.txt
+# Install all Python dependencies
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -r requirements.txt
 ```
 
 Next, install other compulsory dependencies:
@@ -110,7 +93,13 @@ Once your python environment is set up, create your `.env` file with the appropr
 cd ~/GALS-Fold/
 touch .env
 ```
+For the dataset, we use the same processed dataset as gRNAde. Please download it as follows:
 
+```sh
+cd ~/GALS-Fold/data
+gdown --fuzzy 'https://drive.google.com/file/d/1gcUUaRxbGZnGMkLdtVwAILWVerVCbu4Y/view'
+unzip processed.pt.zip
+```
 In order to train your own models from scratch though, you still need to download and process raw RNA structures from RNAsolo.
 
 ## Quick Start
@@ -133,43 +122,6 @@ python evaluate.py model=GALS split=kfold_1 gpu=0
 # Or you can start multiple processing
 nohup sh -c 'python -u evaluate.py model=GALS split=kfold_1 > evalgals1.log 2>&1 ; python -u evaluate.py model=GALS split=kfold_2 > evalgals2.log 2>&1 ; python -u evaluate.py model=GALS split=kfold_3 > evalgals3.log 2>&1 ; python -u evaluate.py model=GALS split=kfold_4 > evalgals4.log 2>&1 ; python -u evaluate.py model=GALS split=kfold_5 > evalgals5.log 2>&1' &
 ```
-
-## Architecture
-
-GALS-Fold uses a geometry-aware long-short dual-stream encoder to capture local geometry and long-range dependencies with near-linear cost:
-
-```
-                   Input: Node Features (Scalar + Vector)
-                                    │
-                 ┌──────────────────┴──────────────────┐
-                 ▼                                     ▼
-    ┌────────────────────────┐          ┌──────────────────────────────┐
-    │      Short-Range       │          │         Long-Range           │
-    │     (GVPAttention)     │          │  (Gated Dynamic Projection)  │
-    └───────────┬────────────┘          └──────────────┬───────────────┘
-                │                                      │
-                └──────────────────┬───────────────────┘
-                                   ▼
-                        ┌────────────────────┐
-                        │ Length-Aware Gating│
-                        └──────────┬─────────┘
-                                   ▼
-                            Fused Features
-```
-
-### Short-Range Branch
-
-- SE(3)-equivariant GVP message passing on a k-NN graph to model local geometry and motifs.
-
-### Long-Range Branch
-
-- Linear anchor attention via dynamic projection to model global interactions at nearly O(N) cost.
-- Local-exclusion regularization discourages adjacent nucleotides from sharing anchors, keeping the long branch focused on non-local signals.
-
-### Fusion Mechanism
-
-- Length-aware gating adaptively fuses long and short features as sequence length increases.
-
 ---
 
 ## Experiments
@@ -199,9 +151,9 @@ We visualize designed RNAs against native backbones using RhoFold predictions an
 
 ---
 
-### Artifacts
+### Data Files
 
-- Model checkpoints: `checkpoint/`
+- GALS-Fold Model checkpoints: `checkpoint/`
 - Statistics tables (txt): `statistics/data/`
 - Test FASTA archives: `statistics/testfasta/`
 - Analysis notebook: `statistics/StatisticalNotebook.ipynb` (processes the statistics and FASTA artifacts)
@@ -210,7 +162,7 @@ We visualize designed RNAs against native backbones using RhoFold predictions an
 
 The model is trained on all RNA structures from the PDB at ≤4A resolution downloaded via [RNASolo](https://rnasolo.cs.put.poznan.pl) with date cutoff: 31 October 2023.
 Besides, you can download and extract the raw files via the following script into the `data/raw/` directory.
-Alternatively to the instructions below, you can download a pre-processed [`.pt`](https://drive.google.com/file/d/1gcUUaRxbGZnGMkLdtVwAILWVerVCbu4Y/view?usp=sharing) file and [`.csv`](https://drive.google.com/file/d/1lbdiE1LfWPReo5VnZy0zblvhVl5QhaF4/view?usp=sharing) metadata, and place them into the `data/` directory.
+Alternatively to the instructions below, you can follow the **Setup** instructions to download a pre-processed [`.pt`](https://drive.google.com/file/d/1gcUUaRxbGZnGMkLdtVwAILWVerVCbu4Y/view?usp=sharing) file and [`.csv`](https://drive.google.com/file/d/1lbdiE1LfWPReo5VnZy0zblvhVl5QhaF4/view?usp=sharing) metadata, and place them into the `data/` directory.
 
 ```sh
 # Download structures in PDB format from RNAsolo (31 October 2023 cutoff)
