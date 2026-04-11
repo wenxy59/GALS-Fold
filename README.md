@@ -149,6 +149,11 @@ We visualize designed RNAs against native backbones using RhoFold predictions an
   <img src="./statistics/real.png" width="80%" />
 </p>
 
+We further analyze long-range contact preservation on a 258 nt group II intron (PDB 4Y1O). GALS-Fold achieves contact F1 = 0.825 vs. 0.726 for gRNAde, with the gap widening at extreme sequence separations. Distance deviation heatmaps confirm that GALS-Fold maintains more faithful non-local spatial arrangements across the structure.
+
+<p align="center">
+  <img src="./statistics/case.png" width="80%" />
+</p>
 ---
 
 ### Data Files
