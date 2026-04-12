@@ -12,7 +12,7 @@
 
 ## Overview
 
-**GALS-Fold** is a geometry-aware long-short framework for RNA inverse folding: designing nucleotide sequences that adopt a prescribed 3D backbone. It addresses the “long RNA dilemma”: local geometric GNNs capture short-range motifs but struggle with long-range tertiary constraints, while global attention captures distant couplings but incurs quadratic cost. GALS-Fold combines an SE(3)-equivariant short-range encoder with a linear-time long-range module based on anchor attention, adds a local-exclusion regularization to emphasize non-local signals, and fuses long/short features with length-aware gating for scalability to long RNAs.
+**GALS-Fold**, a **G**eometry-**A**ware **L**ong-**S**hort framework that reconciles local geometric fidelity with efficient global context. GALS-Fold combines an SE(3)-equivariant GNN based short-range encoder with a linear-time long-range module based on anchor attention. To ensure the long branch focuses on non-local information, we introduce a local exclusion regularization that discourages adjacent nucleotides from sharing the same anchors. The long and short features are finally fused with a length-aware gating strategy. This design yields a linear-time **encoder** that preserves local geometric fidelity while enabling efficient modeling of long-range dependencies.
 
 <p align="center">
   <img src="./statistics/Framework.png" width="90%" />
