@@ -154,6 +154,9 @@ We further analyze long-range contact preservation on a 258 nt group II intron (
 <p align="center">
   <img src="./statistics/case.png" width="60%" />
 </p>
+<p align="center">
+  <em>Long-range contact analysis for PDB 4Y1O (258 nt, group II intron domain 1). <strong>(a)–(c)</strong> C3'–C3' distance matrices for native, GALS-Fold, and gRNAde structures; long-range contacts (|i−j|>20, d<20 Å) highlighted in orange. <strong>(d)–(e)</strong> Distance deviation from native; GALS-Fold shows smaller deviations (blue) while gRNAde exhibits large shifts (red), particularly among sequence-distant residue pairs. <strong>(f)–(h)</strong> 3D visualization of a representative contact between positions 59 (red sphere) and 190 (blue sphere), separated by 131 nt. Gray: native backbone. GALS-Fold preserves this contact (6.5 Å vs. native 6.0 Å), while gRNAde disrupts it (14.5 Å). Overall long-range contact F1: GALS-Fold 0.825 vs. gRNAde 0.726.</em>
+</p>
 
 ---
 
